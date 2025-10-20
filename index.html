@@ -3,138 +3,159 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>تحديد الموقع الجغرافي الدقيق مع اسم المكان</title>
+<title>تحديد الموقع بدقة عالية</title>
 <style>
-body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin:0; padding:20px; background:linear-gradient(135deg,#667eea 0%,#764ba2 100%); color:#333; min-height:100vh; text-align:center;}
-.container{max-width:800px;margin:0 auto;background:white;border-radius:15px;box-shadow:0 10px 30px rgba(0,0,0,0.2);padding:30px;margin-top:20px;}
-h1{color:#2c3e50;margin-bottom:20px;}
-.btn{background:#3498db;color:white;border:none;padding:12px 25px;font-size:18px;border-radius:50px;cursor:pointer;margin:10px;box-shadow:0 4px 6px rgba(0,0,0,0.1);transition:all 0.3s;}
-.btn:hover{background:#2980b9;transform:translateY(-2px);}
-.btn-success{background:#2ecc71;}
-.location-info{background:#f8f9fa;border-radius:10px;padding:20px;margin:20px 0;text-align:right;display:none;}
-.map-container{height:400px;width:100%;border-radius:10px;overflow:hidden;margin:20px 0;display:none;box-shadow:0 4px 10px rgba(0,0,0,0.1);}
-.coordinates{font-family:monospace;background:#eee;padding:5px 10px;border-radius:5px;direction:ltr;}
-.accuracy{font-weight:bold;color:#e74c3c;}
-.loader{border:5px solid #f3f3f3;border-top:5px solid #3498db;border-radius:50%;width:50px;height:50px;animation:spin 2s linear infinite;margin:20px auto;display:none;}
-@keyframes spin{0%{transform:rotate(0deg);}100%{transform:rotate(360deg);}}
-.error{background:#f8d7da;color:#721c24;padding:15px;border-radius:10px;margin:20px 0;display:none;}
+  body {
+    margin:0;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(135deg,#667eea 0%,#764ba2 100%);
+    color:#333;
+  }
+  .container{
+    max-width:900px; margin:0 auto; padding:20px;
+  }
+  h1{color:white;text-align:center;}
+  .btn{
+    background:#3498db;color:white;padding:12px 25px;border:none;border-radius:50px;cursor:pointer;margin:10px;font-size:16px;
+  }
+  .btn:hover{background:#2980b9;}
+  .info, .error{
+    background:#fff;padding:15px;border-radius:10px;margin:15px 0;
+  }
+  .info{display:none;}
+  .error{display:none;color:red;}
+  .map-container{
+    width:100%; height:60vh; border-radius:10px; overflow:hidden; margin-top:15px; display:none;
+    box-shadow:0 4px 10px rgba(0,0,0,0.2);
+  }
 </style>
 </head>
 <body>
 <div class="container">
-<h1>تحديد الموقع الجغرافي الدقيق مع اسم المكان</h1>
-
-<button id="getLocation" class="btn btn-success">تحديد موقعي بدقة عالية</button>
-
-<div class="loader" id="loader"></div>
-<div class="error" id="error"></div>
-
-<div class="location-info" id="locationInfo">
-    <h2>تفاصيل موقعك</h2>
-    <p><strong>اسم المكان:</strong> <span id="placeName"></span></p>
-    <p><strong>خط العرض:</strong> <span id="latitude" class="coordinates"></span></p>
-    <p><strong>خط الطول:</strong> <span id="longitude" class="coordinates"></span></p>
-    <p><strong>الدقة:</strong> <span id="accuracy" class="accuracy"></span> متر</p>
-    <p><strong>الارتفاع:</strong> <span id="altitude"></span></p>
+<h1>تحديد الموقع بدقة عالية</h1>
+<div class="btn" id="startBtn">ابدأ تحديد موقعي</div>
+<div class="info" id="info">
+  <p><strong>الموقع الحالي:</strong> <span id="placename">يتم تحديده...</span></p>
+  <p><strong>الدقة:</strong> <span id="accuracy">0</span> متر</p>
 </div>
-
+<div class="error" id="error"></div>
 <div class="map-container" id="mapContainer"></div>
 </div>
 
 <script>
-const getLocationBtn = document.getElementById('getLocation');
-const locationInfo = document.getElementById('locationInfo');
-const latitudeElem = document.getElementById('latitude');
-const longitudeElem = document.getElementById('longitude');
+const startBtn = document.getElementById('startBtn');
+const infoDiv = document.getElementById('info');
+const placenameElem = document.getElementById('placename');
 const accuracyElem = document.getElementById('accuracy');
-const altitudeElem = document.getElementById('altitude');
-const placeNameElem = document.getElementById('placeName');
-const loader = document.getElementById('loader');
 const errorDiv = document.getElementById('error');
 const mapContainer = document.getElementById('mapContainer');
 
-getLocationBtn.addEventListener('click', () => {
-    if (!navigator.geolocation) {
-        showError("متصفحك لا يدعم خدمة تحديد الموقع الجغرافي");
-        return;
+let watchId = null;
+let bestPos = null;
+let bestAcc = Infinity;
+
+async function reverseGeocode(lat, lon){
+  try{
+    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=18`);
+    const data = await res.json();
+    return data.display_name || 'غير محدد';
+  }catch(e){
+    return 'غير محدد';
+  }
+}
+
+function showMap(lat, lon){
+  mapContainer.style.display='block';
+  mapContainer.innerHTML = `
+    <iframe 
+      width="100%" 
+      height="100%" 
+      frameborder="0" 
+      scrolling="no" 
+      marginheight="0" 
+      marginwidth="0" 
+      src="https://maps.google.com/maps?q=${lat},${lon}&z=18&output=embed"
+      style="border:0;">
+    </iframe>
+  `;
+}
+
+function onPosition(position){
+  const {latitude, longitude, accuracy} = position.coords;
+
+  if(accuracy < bestAcc){
+    bestAcc = accuracy;
+    bestPos = position;
+  }
+
+  accuracyElem.textContent = accuracy.toFixed(1);
+
+  // إذا حصلنا على دقة أقل من 15 متر، نعتبرها ممتازة ونوقف watch
+  if(accuracy <= 15){
+    navigator.geolocation.clearWatch(watchId);
+    bestPos = position;
+    updateDisplay(position);
+  }
+}
+
+async function updateDisplay(position){
+  const {latitude, longitude, accuracy} = position.coords;
+  const name = await reverseGeocode(latitude, longitude);
+
+  placenameElem.textContent = name;
+  accuracyElem.textContent = accuracy.toFixed(1);
+  infoDiv.style.display='block';
+  showMap(latitude, longitude);
+}
+
+function handleError(error){
+  let msg = '';
+  switch(error.code){
+    case error.PERMISSION_DENIED:
+      msg = 'تم رفض الوصول للموقع';
+      break;
+    case error.POSITION_UNAVAILABLE:
+      msg = 'الموقع غير متاح';
+      break;
+    case error.TIMEOUT:
+      msg = 'انتهت مهلة الحصول على الموقع';
+      break;
+    default:
+      msg = 'حدث خطأ غير معروف';
+  }
+  errorDiv.textContent = msg;
+  errorDiv.style.display='block';
+}
+
+startBtn.addEventListener('click', ()=>{
+  if(!navigator.geolocation){
+    handleError({code:0});
+    return;
+  }
+  errorDiv.style.display='none';
+  infoDiv.style.display='none';
+  mapContainer.style.display='none';
+  bestPos = null;
+  bestAcc = Infinity;
+
+  // نجمع بيانات دقيقة من GPS
+  watchId = navigator.geolocation.watchPosition(onPosition, handleError, {
+    enableHighAccuracy:true,
+    maximumAge:0,
+    timeout:20000
+  });
+
+  // بعد 10 ثواني إذا لم نحصل على دقة جيدة نأخذ أفضل قراءة
+  setTimeout(()=>{
+    if(bestPos){
+      navigator.geolocation.clearWatch(watchId);
+      updateDisplay(bestPos);
+    }else{
+      errorDiv.textContent='لم نتمكن من تحديد الموقع بدقة';
+      errorDiv.style.display='block';
     }
-
-    loader.style.display = 'block';
-    errorDiv.style.display = 'none';
-
-    let bestPosition = null;
-    let bestAccuracy = Infinity;
-
-    const watchId = navigator.geolocation.watchPosition(
-        (pos) => {
-            const acc = pos.coords.accuracy;
-            if(acc < bestAccuracy){
-                bestAccuracy = acc;
-                bestPosition = pos;
-            }
-        },
-        (err) => {
-            loader.style.display='none';
-            handleLocationError(err);
-        },
-        { enableHighAccuracy:true, maximumAge:0, timeout:20000 }
-    );
-
-    // بعد 8 ثواني نأخذ أفضل إشارة
-    setTimeout(async () => {
-        navigator.geolocation.clearWatch(watchId);
-        loader.style.display='none';
-        if(!bestPosition){
-            showError("لم يتم الحصول على موقع دقيق");
-            return;
-        }
-
-        displayLocation(bestPosition);
-        await reverseGeocode(bestPosition.coords.latitude, bestPosition.coords.longitude);
-        showMap(bestPosition.coords.latitude, bestPosition.coords.longitude);
-    }, 8000);
+  },10000);
 });
-
-function displayLocation(position){
-    const coords = position.coords;
-    latitudeElem.textContent = coords.latitude.toFixed(8);
-    longitudeElem.textContent = coords.longitude.toFixed(8);
-    accuracyElem.textContent = coords.accuracy.toFixed(2);
-    altitudeElem.textContent = coords.altitude ? coords.altitude.toFixed(2) + ' متر' : 'غير متاح';
-    locationInfo.style.display = 'block';
-}
-
-// استخدام Nominatim API للحصول على اسم المكان
-async function reverseGeocode(lat, lng){
-    try{
-        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18`);
-        const data = await res.json();
-        placeNameElem.textContent = data.display_name || 'غير متاح';
-    }catch(e){
-        placeNameElem.textContent = 'غير متاح';
-    }
-}
-
-function showMap(lat,lng){
-    mapContainer.style.display='block';
-    mapContainer.innerHTML = `<iframe width="100%" height="100%" frameborder="0" scrolling="no" marginheight="0" marginwidth="0" src="https://maps.google.com/maps?q=${lat},${lng}&z=18&output=embed" style="border:0;"></iframe>`;
-}
-
-function handleLocationError(error){
-    let msg = '';
-    switch(error.code){
-        case error.PERMISSION_DENIED: msg="تم رفض طلب الوصول إلى الموقع"; break;
-        case error.POSITION_UNAVAILABLE: msg="معلومات الموقع غير متاحة"; break;
-        case error.TIMEOUT: msg="انتهت مهلة طلب الموقع"; break;
-        default: msg="حدث خطأ أثناء محاولة تحديد الموقع"; break;
-    }
-    showError(msg);
-}
-
-function showError(msg){
-    errorDiv.textContent = msg;
-    errorDiv.style.display='block';
-}
 </script>
 </body>
 </html>
