@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>تحديد الموقع بدقة عالية</title>
+<title>تتبع الموقع بدقة عالية</title>
 <style>
   body {
     margin:0;
@@ -32,8 +32,8 @@
 </head>
 <body>
 <div class="container">
-<h1>تحديد الموقع بدقة عالية</h1>
-<div class="btn" id="startBtn">ابدأ تحديد موقعي</div>
+<h1>تتبع الموقع لحظيًا</h1>
+<div class="btn" id="startBtn">ابدأ التتبع</div>
 <div class="info" id="info">
   <p><strong>الموقع الحالي:</strong> <span id="placename">يتم تحديده...</span></p>
   <p><strong>الدقة:</strong> <span id="accuracy">0</span> متر</p>
@@ -51,8 +51,7 @@ const errorDiv = document.getElementById('error');
 const mapContainer = document.getElementById('mapContainer');
 
 let watchId = null;
-let bestPos = null;
-let bestAcc = Infinity;
+let mapIframe = null;
 
 async function reverseGeocode(lat, lon){
   try{
@@ -64,7 +63,7 @@ async function reverseGeocode(lat, lon){
   }
 }
 
-function showMap(lat, lon){
+function updateMap(lat, lon){
   mapContainer.style.display='block';
   mapContainer.innerHTML = `
     <iframe 
@@ -80,48 +79,24 @@ function showMap(lat, lon){
   `;
 }
 
-function onPosition(position){
+async function onPosition(position){
   const {latitude, longitude, accuracy} = position.coords;
-
-  if(accuracy < bestAcc){
-    bestAcc = accuracy;
-    bestPos = position;
-  }
-
   accuracyElem.textContent = accuracy.toFixed(1);
 
-  // إذا حصلنا على دقة أقل من 15 متر، نعتبرها ممتازة ونوقف watch
-  if(accuracy <= 15){
-    navigator.geolocation.clearWatch(watchId);
-    bestPos = position;
-    updateDisplay(position);
-  }
-}
-
-async function updateDisplay(position){
-  const {latitude, longitude, accuracy} = position.coords;
   const name = await reverseGeocode(latitude, longitude);
-
   placenameElem.textContent = name;
-  accuracyElem.textContent = accuracy.toFixed(1);
+  
   infoDiv.style.display='block';
-  showMap(latitude, longitude);
+  updateMap(latitude, longitude);
 }
 
 function handleError(error){
   let msg = '';
   switch(error.code){
-    case error.PERMISSION_DENIED:
-      msg = 'تم رفض الوصول للموقع';
-      break;
-    case error.POSITION_UNAVAILABLE:
-      msg = 'الموقع غير متاح';
-      break;
-    case error.TIMEOUT:
-      msg = 'انتهت مهلة الحصول على الموقع';
-      break;
-    default:
-      msg = 'حدث خطأ غير معروف';
+    case error.PERMISSION_DENIED: msg = 'تم رفض الوصول للموقع'; break;
+    case error.POSITION_UNAVAILABLE: msg = 'الموقع غير متاح'; break;
+    case error.TIMEOUT: msg = 'انتهت مهلة الحصول على الموقع'; break;
+    default: msg = 'حدث خطأ غير معروف';
   }
   errorDiv.textContent = msg;
   errorDiv.style.display='block';
@@ -135,26 +110,12 @@ startBtn.addEventListener('click', ()=>{
   errorDiv.style.display='none';
   infoDiv.style.display='none';
   mapContainer.style.display='none';
-  bestPos = null;
-  bestAcc = Infinity;
 
-  // نجمع بيانات دقيقة من GPS
   watchId = navigator.geolocation.watchPosition(onPosition, handleError, {
     enableHighAccuracy:true,
     maximumAge:0,
     timeout:20000
   });
-
-  // بعد 10 ثواني إذا لم نحصل على دقة جيدة نأخذ أفضل قراءة
-  setTimeout(()=>{
-    if(bestPos){
-      navigator.geolocation.clearWatch(watchId);
-      updateDisplay(bestPos);
-    }else{
-      errorDiv.textContent='لم نتمكن من تحديد الموقع بدقة';
-      errorDiv.style.display='block';
-    }
-  },10000);
 });
 </script>
 </body>
