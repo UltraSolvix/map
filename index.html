@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>تتبع الموقع بدقة عالية واستكشاف الخريطة</title>
+<title>تتبع الموقع بدقة عالية</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 <style>
   body {margin:0; font-family:sans-serif; background:#667eea; color:#fff;}
@@ -39,8 +39,9 @@
 let map = L.map('map').setView([0,0],18);
 let marker = null;
 let follow = true; // التتبع مفعل تلقائياً
+let mapDraggedByUser = false;
 
-// استخدم خرائط OSM عالية الدقة (يمكن استبدالها بخرائط Mapbox Streets إذا أردت)
+// استخدم خرائط OSM عالية الدقة
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
   maxZoom:19,
   attribution:'© OpenStreetMap'
@@ -49,6 +50,13 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
 const placenameElem = document.getElementById('placename');
 const accuracyElem = document.getElementById('accuracy');
 const followBtn = document.getElementById('followBtn');
+
+// أيقونة سهم دائري متجهة لاتجاه الحركة
+const arrowIcon = L.divIcon({
+  html: '<div style="transform: rotate(0deg); width:20px; height:20px; background:#e74c3c; clip-path: polygon(50% 0%, 0% 100%, 100% 100%);"></div>',
+  iconSize:[20,20],
+  className:''
+});
 
 // جلب اسم المكان باستخدام Nominatim
 async function reverseGeocode(lat, lon){
@@ -63,16 +71,20 @@ async function reverseGeocode(lat, lon){
 
 // تحديث موقع المستخدم
 function updatePosition(position){
-  const {latitude, longitude, accuracy} = position.coords;
+  const {latitude, longitude, accuracy, heading} = position.coords;
   accuracyElem.textContent = accuracy.toFixed(1);
 
   if(marker){
     marker.setLatLng([latitude,longitude]);
+    // تدوير السهم حسب الاتجاه
+    const angle = heading !== null ? heading : 0;
+    marker.getElement().style.transform = `rotate(${angle}deg)`;
   } else {
-    marker = L.marker([latitude,longitude]).addTo(map);
+    marker = L.marker([latitude,longitude], {icon: arrowIcon}).addTo(map);
   }
 
-  if(follow){
+  // تحريك الخريطة فقط إذا المستخدم لم يسحبها بيده
+  if(follow && !mapDraggedByUser){
     map.setView([latitude,longitude],18);
   }
 
@@ -100,8 +112,17 @@ if(navigator.geolocation){
 // زر تفعيل/إيقاف متابعة الموقع
 followBtn.addEventListener('click', ()=>{
   follow = !follow;
+  mapDraggedByUser = !follow; // عند إيقاف التتبع يمكن التحريك بحرية
   followBtn.textContent = follow ? "متابعة موقعي" : "تم إيقاف التتبع";
   followBtn.classList.toggle('following', !follow);
+});
+
+// اكتشاف سحب الخريطة بيد المستخدم
+map.on('dragstart', ()=>{
+  mapDraggedByUser = true;
+});
+map.on('zoomstart', ()=>{
+  mapDraggedByUser = true;
 });
 </script>
 </body>
