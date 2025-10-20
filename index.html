@@ -3,15 +3,26 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>تتبع الموقع بدقة عالية</title>
+<title>تتبع الموقع بدقة عالية واستكشاف الخريطة</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 <style>
   body {margin:0; font-family:sans-serif; background:#667eea; color:#fff;}
   h1{text-align:center; margin:10px;}
-  #map{height:80vh; width:100%; margin:0; padding:0;}
+  #map{height:80vh; width:100%;}
   #info {padding:10px; text-align:center; background:rgba(0,0,0,0.5);}
   #placename {font-size:1.2em; font-weight:bold;}
   #accuracy {font-weight:bold;}
+  #followBtn {
+    padding:8px 15px;
+    font-size:16px;
+    border:none;
+    border-radius:5px;
+    cursor:pointer;
+    background:#2ecc71;
+    color:white;
+    margin-left:10px;
+  }
+  #followBtn.following{background:#e74c3c;}
 </style>
 </head>
 <body>
@@ -19,22 +30,27 @@
 <div id="info">
   <span>الموقع الحالي: </span><span id="placename">يتم التحديد...</span>
   <span> | الدقة: </span><span id="accuracy">0</span> متر
+  <button id="followBtn">متابعة موقعي</button>
 </div>
 <div id="map"></div>
 
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 <script>
-let map = L.map('map').setView([0,0],18); // مركز افتراضي
+let map = L.map('map').setView([0,0],18);
 let marker = null;
+let follow = true; // التتبع مفعل تلقائياً
 
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  maxZoom: 19,
-  attribution: '© OpenStreetMap'
+// استخدم خرائط OSM عالية الدقة (يمكن استبدالها بخرائط Mapbox Streets إذا أردت)
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+  maxZoom:19,
+  attribution:'© OpenStreetMap'
 }).addTo(map);
 
 const placenameElem = document.getElementById('placename');
 const accuracyElem = document.getElementById('accuracy');
+const followBtn = document.getElementById('followBtn');
 
+// جلب اسم المكان باستخدام Nominatim
 async function reverseGeocode(lat, lon){
   try{
     const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=18`);
@@ -45,6 +61,7 @@ async function reverseGeocode(lat, lon){
   }
 }
 
+// تحديث موقع المستخدم
 function updatePosition(position){
   const {latitude, longitude, accuracy} = position.coords;
   accuracyElem.textContent = accuracy.toFixed(1);
@@ -55,18 +72,21 @@ function updatePosition(position){
     marker = L.marker([latitude,longitude]).addTo(map);
   }
 
-  map.setView([latitude,longitude],18); // تحديث مركز الخريطة بسلاسة
+  if(follow){
+    map.setView([latitude,longitude],18);
+  }
 
-  // تحديث اسم المكان
   reverseGeocode(latitude,longitude).then(name=>{
     placenameElem.textContent = name;
   });
 }
 
+// معالجة الأخطاء
 function handleError(err){
   placenameElem.textContent = "حدث خطأ: " + err.message;
 }
 
+// مراقبة الموقع بشكل مستمر
 if(navigator.geolocation){
   navigator.geolocation.watchPosition(updatePosition, handleError, {
     enableHighAccuracy:true,
@@ -76,6 +96,13 @@ if(navigator.geolocation){
 } else {
   placenameElem.textContent = "متصفحك لا يدعم تحديد الموقع";
 }
+
+// زر تفعيل/إيقاف متابعة الموقع
+followBtn.addEventListener('click', ()=>{
+  follow = !follow;
+  followBtn.textContent = follow ? "متابعة موقعي" : "تم إيقاف التتبع";
+  followBtn.classList.toggle('following', !follow);
+});
 </script>
 </body>
 </html>
