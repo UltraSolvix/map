@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>تحديد الموقع الجغرافي الدقيق</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            min-height: 100vh;
+            text-align: center;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            padding: 30px;
+            margin-top: 20px;
+        }
+        
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 20px;
+        }
+        
+        .btn {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            font-size: 18px;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .btn:hover {
+            background: #2980b9;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 8px rgba(0, 0, 0, 0.15);
+        }
+        
+        .btn:active {
+            transform: translateY(0);
+        }
+        
+        .btn-success {
+            background: #2ecc71;
+        }
+        
+        .btn-success:hover {
+            background: #27ae60;
+        }
+        
+        .location-info {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            text-align: right;
+            display: none;
+        }
+        
+        .map-container {
+            height: 400px;
+            width: 100%;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 20px 0;
+            display: none;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+        }
+        
+        .accuracy {
+            font-weight: bold;
+            color: #e74c3c;
+        }
+        
+        .coordinates {
+            font-family: monospace;
+            background: #eee;
+            padding: 5px 10px;
+            border-radius: 5px;
+            direction: ltr;
+        }
+        
+        .permission-prompt {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        
+        .loader {
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #3498db;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 2s linear infinite;
+            margin: 20px auto;
+            display: none;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>تحديد الموقع الجغرافي الدقيق</h1>
+        
+        <div class="permission-prompt">
+            <h2>طلب إذن الوصول للموقع</h2>
+            <p>هذا التطبيق يحتاج إلى إذنك للوصول إلى موقعك الجغرافي لتقديم خدمة تحديد الموقع بدقة عالية.</p>
+            <button id="requestPermission" class="btn">منح الإذن</button>
+        </div>
+        
+        <div id="locationSection" style="display: none;">
+            <p>تم منح الإذن بنجاح. يمكنك الآن تحديد موقعك:</p>
+            <button id="getLocation" class="btn btn-success">تحديد موقعي</button>
+        </div>
+        
+        <div class="loader" id="loader"></div>
+        
+        <div class="error" id="error"></div>
+        
+        <div class="location-info" id="locationInfo">
+            <h2>تفاصيل موقعك</h2>
+            <p><strong>خط العرض:</strong> <span id="latitude" class="coordinates"></span></p>
+            <p><strong>خط الطول:</strong> <span id="longitude" class="coordinates"></span></p>
+            <p><strong>الدقة:</strong> <span id="accuracy" class="accuracy"></span> متر</p>
+            <p><strong>الارتفاع:</strong> <span id="altitude"></span></p>
+            <p><strong>دقة الارتفاع:</strong> <span id="altitudeAccuracy"></span> متر</p>
+            <p><strong>الاتجاه:</strong> <span id="heading"></span> درجة</p>
+            <p><strong>السرعة:</strong> <span id="speed"></span> متر/ثانية</p>
+            <p><strong>الوقت:</strong> <span id="timestamp"></span></p>
+        </div>
+        
+        <div class="map-container" id="mapContainer">
+            <!-- سيتم إضافة الخريطة هنا -->
+        </div>
+    </div>
+
+    <script>
+        // عناصر DOM
+        const requestPermissionBtn = document.getElementById('requestPermission');
+        const getLocationBtn = document.getElementById('getLocation');
+        const locationSection = document.getElementById('locationSection');
+        const locationInfo = document.getElementById('locationInfo');
+        const mapContainer = document.getElementById('mapContainer');
+        const loader = document.getElementById('loader');
+        const errorDiv = document.getElementById('error');
+        
+        // عناصر عرض البيانات
+        const latitudeElem = document.getElementById('latitude');
+        const longitudeElem = document.getElementById('longitude');
+        const accuracyElem = document.getElementById('accuracy');
+        const altitudeElem = document.getElementById('altitude');
+        const altitudeAccuracyElem = document.getElementById('altitudeAccuracy');
+        const headingElem = document.getElementById('heading');
+        const speedElem = document.getElementById('speed');
+        const timestampElem = document.getElementById('timestamp');
+        
+        // طلب الإذن
+        requestPermissionBtn.addEventListener('click', () => {
+            if (!navigator.geolocation) {
+                showError("متصفحك لا يدعم خدمة تحديد الموقع الجغرافي");
+                return;
+            }
+            
+            loader.style.display = 'block';
+            
+            // طلب الإذن باستخدام getCurrentPosition
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    // نجح الحصول على الموقع
+                    loader.style.display = 'none';
+                    locationSection.style.display = 'block';
+                    requestPermissionBtn.textContent = 'تم منح الإذن';
+                    requestPermissionBtn.disabled = true;
+                },
+                (error) => {
+                    // فشل الحصول على الموقع
+                    loader.style.display = 'none';
+                    handleLocationError(error);
+                },
+                {
+                    enableHighAccuracy: true,
+                    timeout: 10000,
+                    maximumAge: 0
+                }
+            );
+        });
+        
+        // تحديد الموقع
+        getLocationBtn.addEventListener('click', () => {
+            loader.style.display = 'block';
+            errorDiv.style.display = 'none';
+            
+            // إعدادات للحصول على دقة عالية
+            const options = {
+                enableHighAccuracy: true,  // استخدام GPS وأجهزة الاستشعار للحصول على دقة عالية
+                timeout: 15000,           // زيادة الوقت للسماح بتحديد دقيق
+                maximumAge: 0             // عدم استخدام البيانات المخزنة مؤقتًا
+            };
+            
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    loader.style.display = 'none';
+                    displayLocation(position);
+                    showMap(position.coords.latitude, position.coords.longitude);
+                },
+                (error) => {
+                    loader.style.display = 'none';
+                    handleLocationError(error);
+                },
+                options
+            );
+        });
+        
+        // عرض بيانات الموقع
+        function displayLocation(position) {
+            const coords = position.coords;
+            
+            latitudeElem.textContent = coords.latitude.toFixed(8);
+            longitudeElem.textContent = coords.longitude.toFixed(8);
+            accuracyElem.textContent = coords.accuracy.toFixed(2);
+            
+            // عرض الارتفاع إذا كان متاحًا
+            altitudeElem.textContent = coords.altitude ? 
+                coords.altitude.toFixed(2) + ' متر' : 'غير متاح';
+            
+            // عرض دقة الارتفاع إذا كانت متاحة
+            altitudeAccuracyElem.textContent = coords.altitudeAccuracy ? 
+                coords.altitudeAccuracy.toFixed(2) + ' متر' : 'غير متاح';
+            
+            // عرض الاتجاه إذا كان متاحًا
+            headingElem.textContent = coords.heading ? 
+                coords.heading.toFixed(2) + ' درجة' : 'غير متاح';
+            
+            // عرض السرعة إذا كانت متاحة
+            speedElem.textContent = coords.speed ? 
+                coords.speed.toFixed(2) + ' متر/ثانية' : 'غير متاح';
+            
+            // عرض الوقت
+            const date = new Date(position.timestamp);
+            timestampElem.textContent = date.toLocaleString('ar-EG');
+            
+            locationInfo.style.display = 'block';
+            
+            // إظهار رسالة خاصة إذا كانت الدقة عالية جدًا
+            if (coords.accuracy <= 10) {
+                accuracyElem.innerHTML += ' <span style="color:green">(دقة عالية جدًا!)</span>';
+            } else if (coords.accuracy <= 50) {
+                accuracyElem.innerHTML += ' <span style="color:orange">(دقة جيدة)</span>';
+            }
+        }
+        
+        // عرض الخريطة
+        function showMap(lat, lng) {
+            mapContainer.style.display = 'block';
+            mapContainer.innerHTML = `
+                <iframe 
+                    width="100%" 
+                    height="100%" 
+                    frameborder="0" 
+                    scrolling="no" 
+                    marginheight="0" 
+                    marginwidth="0" 
+                    src="https://maps.google.com/maps?q=${lat},${lng}&z=17&output=embed"
+                    style="border:0;">
+                </iframe>
+                <br/>
+                <small>
+                    <a href="https://maps.google.com/maps?q=${lat},${lng}&z=17" target="_blank">عرض خريطة أكبر</a>
+                </small>
+            `;
+        }
+        
+        // معالجة الأخطاء
+        function handleLocationError(error) {
+            let message = '';
+            
+            switch(error.code) {
+                case error.PERMISSION_DENIED:
+                    message = "تم رفض طلب الوصول إلى الموقع. يرجى منح الإذن لاستخدام التطبيق.";
+                    break;
+                case error.POSITION_UNAVAILABLE:
+                    message = "معلومات الموقع غير متاحة حالياً. حاول مرة أخرى في مكان مفتوح.";
+                    break;
+                case error.TIMEOUT:
+                    message = "انتهت مهلة طلب الموقع. حاول مرة أخرى.";
+                    break;
+                default:
+                    message = "حدث خطأ غير معروف أثناء محاولة تحديد الموقع.";
+                    break;
+            }
+            
+            showError(message);
+        }
+        
+        function showError(message) {
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+        }
+    </script>
+</body>
+</html>
