@@ -4,54 +4,36 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>تتبع الموقع بدقة عالية</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 <style>
-  body {
-    margin:0;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background: linear-gradient(135deg,#667eea 0%,#764ba2 100%);
-    color:#333;
-  }
-  .container{
-    max-width:900px; margin:0 auto; padding:20px;
-  }
-  h1{color:white;text-align:center;}
-  .btn{
-    background:#3498db;color:white;padding:12px 25px;border:none;border-radius:50px;cursor:pointer;margin:10px;font-size:16px;
-  }
-  .btn:hover{background:#2980b9;}
-  .info, .error{
-    background:#fff;padding:15px;border-radius:10px;margin:15px 0;
-  }
-  .info{display:none;}
-  .error{display:none;color:red;}
-  .map-container{
-    width:100%; height:60vh; border-radius:10px; overflow:hidden; margin-top:15px; display:none;
-    box-shadow:0 4px 10px rgba(0,0,0,0.2);
-  }
+  body {margin:0; font-family:sans-serif; background:#667eea; color:#fff;}
+  h1{text-align:center; margin:10px;}
+  #map{height:80vh; width:100%; margin:0; padding:0;}
+  #info {padding:10px; text-align:center; background:rgba(0,0,0,0.5);}
+  #placename {font-size:1.2em; font-weight:bold;}
+  #accuracy {font-weight:bold;}
 </style>
 </head>
 <body>
-<div class="container">
-<h1>تتبع الموقع لحظيًا</h1>
-<div class="btn" id="startBtn">ابدأ التتبع</div>
-<div class="info" id="info">
-  <p><strong>الموقع الحالي:</strong> <span id="placename">يتم تحديده...</span></p>
-  <p><strong>الدقة:</strong> <span id="accuracy">0</span> متر</p>
+<h1>تتبع الموقع بدقة عالية</h1>
+<div id="info">
+  <span>الموقع الحالي: </span><span id="placename">يتم التحديد...</span>
+  <span> | الدقة: </span><span id="accuracy">0</span> متر
 </div>
-<div class="error" id="error"></div>
-<div class="map-container" id="mapContainer"></div>
-</div>
+<div id="map"></div>
 
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 <script>
-const startBtn = document.getElementById('startBtn');
-const infoDiv = document.getElementById('info');
+let map = L.map('map').setView([0,0],18); // مركز افتراضي
+let marker = null;
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  maxZoom: 19,
+  attribution: '© OpenStreetMap'
+}).addTo(map);
+
 const placenameElem = document.getElementById('placename');
 const accuracyElem = document.getElementById('accuracy');
-const errorDiv = document.getElementById('error');
-const mapContainer = document.getElementById('mapContainer');
-
-let watchId = null;
-let mapIframe = null;
 
 async function reverseGeocode(lat, lon){
   try{
@@ -63,60 +45,37 @@ async function reverseGeocode(lat, lon){
   }
 }
 
-function updateMap(lat, lon){
-  mapContainer.style.display='block';
-  mapContainer.innerHTML = `
-    <iframe 
-      width="100%" 
-      height="100%" 
-      frameborder="0" 
-      scrolling="no" 
-      marginheight="0" 
-      marginwidth="0" 
-      src="https://maps.google.com/maps?q=${lat},${lon}&z=18&output=embed"
-      style="border:0;">
-    </iframe>
-  `;
-}
-
-async function onPosition(position){
+function updatePosition(position){
   const {latitude, longitude, accuracy} = position.coords;
   accuracyElem.textContent = accuracy.toFixed(1);
 
-  const name = await reverseGeocode(latitude, longitude);
-  placenameElem.textContent = name;
-  
-  infoDiv.style.display='block';
-  updateMap(latitude, longitude);
+  if(marker){
+    marker.setLatLng([latitude,longitude]);
+  } else {
+    marker = L.marker([latitude,longitude]).addTo(map);
+  }
+
+  map.setView([latitude,longitude],18); // تحديث مركز الخريطة بسلاسة
+
+  // تحديث اسم المكان
+  reverseGeocode(latitude,longitude).then(name=>{
+    placenameElem.textContent = name;
+  });
 }
 
-function handleError(error){
-  let msg = '';
-  switch(error.code){
-    case error.PERMISSION_DENIED: msg = 'تم رفض الوصول للموقع'; break;
-    case error.POSITION_UNAVAILABLE: msg = 'الموقع غير متاح'; break;
-    case error.TIMEOUT: msg = 'انتهت مهلة الحصول على الموقع'; break;
-    default: msg = 'حدث خطأ غير معروف';
-  }
-  errorDiv.textContent = msg;
-  errorDiv.style.display='block';
+function handleError(err){
+  placenameElem.textContent = "حدث خطأ: " + err.message;
 }
 
-startBtn.addEventListener('click', ()=>{
-  if(!navigator.geolocation){
-    handleError({code:0});
-    return;
-  }
-  errorDiv.style.display='none';
-  infoDiv.style.display='none';
-  mapContainer.style.display='none';
-
-  watchId = navigator.geolocation.watchPosition(onPosition, handleError, {
+if(navigator.geolocation){
+  navigator.geolocation.watchPosition(updatePosition, handleError, {
     enableHighAccuracy:true,
     maximumAge:0,
     timeout:20000
   });
-});
+} else {
+  placenameElem.textContent = "متصفحك لا يدعم تحديد الموقع";
+}
 </script>
 </body>
 </html>
