@@ -3,27 +3,28 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>تحديد الموقع بدقة عالية</title>
+<title>خريطة GPS تفاعلية مع اتجاه الرأس</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
  integrity="sha256-sA+4fH0wRPHbFZcVbveVqV0+kQ6qD/gJrPp6F4kCkT8=" crossorigin=""/>
 <style>
-  html, body { height: 100%; margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; }
-  #map { width: 100%; height: 100vh; }
-  .info-box {
+html, body { height: 100%; margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; }
+#map { width: 100%; height: 100vh; }
+.info-box {
     position: absolute; top: 10px; right: 10px;
-    background: rgba(255,255,255,0.9); padding: 10px 15px; border-radius: 10px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.3); z-index: 1000;
-    max-width: 300px;
-  }
+    background: rgba(255,255,255,0.95); padding: 15px 20px; border-radius: 12px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.3); z-index: 1000;
+    max-width: 320px;
+    line-height: 1.5;
+}
 </style>
 </head>
 <body>
 <div id="map"></div>
 <div class="info-box" id="infoBox">
-  <strong>اسم المكان:</strong> <span id="placeName">جارٍ التحديد...</span><br>
-  <strong>الدقة:</strong> <span id="accuracy">-</span> متر<br>
-  <strong>خط العرض:</strong> <span id="lat">-</span><br>
-  <strong>خط الطول:</strong> <span id="lng">-</span>
+    <strong>اسم المكان:</strong> <span id="placeName">جارٍ التحديد...</span><br>
+    <strong>الدقة:</strong> <span id="accuracy">-</span> متر<br>
+    <strong>خط العرض:</strong> <span id="lat">-</span><br>
+    <strong>خط الطول:</strong> <span id="lng">-</span>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
@@ -31,34 +32,11 @@
 
 <script>
 // ======== إعداد الخريطة ========
-const map = L.map('map', {
-    zoomControl: true,
-    doubleClickZoom: true,
-    dragging: true
-}).setView([0, 0], 17);
-
-// استخدام OSM عالية الدقة
-const osmHigh = L.tileLayer('https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png', {
+const map = L.map('map', { zoomControl: true, dragging: true }).setView([0,0], 17);
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 20,
     attribution: '&copy; OpenStreetMap contributors'
 }).addTo(map);
-
-// ======== أيقونة السهم ========
-const arrowIcon = L.divIcon({
-    className: '',
-    html: `<div style="transform: rotate(0deg);">
-             <svg width="30" height="30" viewBox="0 0 64 64">
-               <circle cx="32" cy="32" r="10" fill="blue" fill-opacity="0.5"/>
-               <line x1="32" y1="32" x2="32" y2="10" stroke="red" stroke-width="4"/>
-               <polygon points="32,4 28,12 36,12" fill="red"/>
-             </svg>
-           </div>`,
-    iconSize: [30, 30],
-    iconAnchor: [15, 15]
-});
-
-let userMarker = L.marker([0,0], {icon: arrowIcon}).addTo(map);
-let followUser = true; // هل الخريطة تتبع المستخدم
 
 // ======== عناصر واجهة المستخدم ========
 const latElem = document.getElementById('lat');
@@ -66,68 +44,91 @@ const lngElem = document.getElementById('lng');
 const accElem = document.getElementById('accuracy');
 const placeElem = document.getElementById('placeName');
 
-// ======== تتبع الموقع ========
-let positions = []; // لتخزين عدة قراءات وتحسين الدقة
-const maxSamples = 5; // عدد القراءات لأخذ المتوسط
-
-if (!navigator.geolocation) {
-    alert("متصفحك لا يدعم تحديد الموقع.");
-}
-
-navigator.geolocation.watchPosition(handlePosition, handleError, {
-    enableHighAccuracy: true,
-    maximumAge: 0,
-    timeout: 20000
+// ======== أيقونة السهم ========
+const arrowIcon = L.divIcon({
+    className: '',
+    html: `<div style="transform: rotate(0deg);">
+             <svg width="50" height="50" viewBox="0 0 64 64">
+               <circle cx="32" cy="32" r="12" fill="blue" fill-opacity="0.3"/>
+               <line x1="32" y1="32" x2="32" y2="8" stroke="red" stroke-width="4"/>
+               <polygon points="32,2 28,12 36,12" fill="red"/>
+             </svg>
+           </div>`,
+    iconSize: [50,50],
+    iconAnchor: [25,25]
 });
 
-// ======== التعامل مع تحريك الخريطة ========
+let userMarker = L.marker([0,0], {icon: arrowIcon}).addTo(map);
+let accuracyCircle = L.circle([0,0], {radius: 0, color:'blue', fillOpacity:0.1}).addTo(map);
+let followUser = true;
+
+// ======== تحسين دقة الموقع ========
+let positions = [];
+const maxSamples = 5;
+
+// ======== التحكم في تتبع المستخدم ========
 map.on('dragstart', () => { followUser = false; });
 
-// ======== دوال ========
-function handlePosition(position) {
+// ======== دوال الموقع ========
+function handlePosition(position){
     const { latitude, longitude, accuracy, heading } = position.coords;
-    
-    // حفظ القراءات
-    positions.push({lat: latitude, lng: longitude, acc: accuracy});
-    if (positions.length > maxSamples) positions.shift();
-    
-    // حساب المتوسط
-    const avgLat = positions.reduce((sum, p) => sum + p.lat, 0)/positions.length;
-    const avgLng = positions.reduce((sum, p) => sum + p.lng, 0)/positions.length;
-    const avgAcc = positions.reduce((sum, p) => sum + p.acc, 0)/positions.length;
 
-    // تحديث العنصر
+    // جمع القراءات
+    positions.push({lat: latitude, lng: longitude, acc: accuracy});
+    if(positions.length > maxSamples) positions.shift();
+
+    const avgLat = positions.reduce((sum,p)=>sum+p.lat,0)/positions.length;
+    const avgLng = positions.reduce((sum,p)=>sum+p.lng,0)/positions.length;
+    const avgAcc = positions.reduce((sum,p)=>sum+p.acc,0)/positions.length;
+
+    // تحديث المعلومات
     latElem.textContent = avgLat.toFixed(7);
     lngElem.textContent = avgLng.toFixed(7);
     accElem.textContent = avgAcc.toFixed(2);
 
-    // تحديث موقع السهم
+    // تحديث السهم واتجاهه
     userMarker.setLatLng([avgLat, avgLng]);
-    const rotation = heading !== null ? heading : 0;
-    userMarker.getElement().style.transform = `rotate(${rotation}deg)`;
+    accuracyCircle.setLatLng([avgLat, avgLng]);
+    accuracyCircle.setRadius(avgAcc);
 
-    // متابعة المستخدم
-    if (followUser) {
-        map.setView([avgLat, avgLng]);
-    }
+    const rotation = heading !== null ? heading : 0;
+    if(userMarker.getElement()) userMarker.getElement().style.transform = `rotate(${rotation}deg)`;
+
+    // متابعة المستخدم فقط إذا لم يحرك الخريطة
+    if(followUser) map.setView([avgLat, avgLng]);
 
     // استرجاع اسم المكان
     fetch(`https://nominatim.openstreetmap.org/reverse?lat=${avgLat}&lon=${avgLng}&format=json`)
-    .then(res => res.json())
-    .then(data => {
-        if(data.address){
-            let name = data.display_name;
-            placeElem.textContent = name;
-        } else {
-            placeElem.textContent = "غير متاح";
-        }
-    })
-    .catch(err => placeElem.textContent = "خطأ في جلب الاسم");
+    .then(res=>res.json())
+    .then(data=>{
+        if(data.display_name) placeElem.textContent = data.display_name;
+        else placeElem.textContent = "غير متاح";
+    }).catch(err=>placeElem.textContent = "خطأ في جلب الاسم");
 }
 
+// ======== Device Orientation ========
+window.addEventListener('deviceorientation', (event)=>{
+    const alpha = event.alpha; // 0-360 درجة
+    if(alpha !== null && userMarker.getElement()){
+        userMarker.getElement().style.transform = `rotate(${alpha}deg)`;
+    }
+});
+
+// ======== أخطاء الموقع ========
 function handleError(err){
     console.error(err);
     alert("تعذر تحديد الموقع: " + err.message);
+}
+
+// ======== تفعيل GPS ========
+if(navigator.geolocation){
+    navigator.geolocation.watchPosition(handlePosition, handleError, {
+        enableHighAccuracy: true,
+        maximumAge: 0,
+        timeout: 20000
+    });
+}else{
+    alert("متصفحك لا يدعم تحديد الموقع.");
 }
 </script>
 </body>
