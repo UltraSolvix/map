@@ -3,127 +3,138 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>تتبع الموقع بدقة عالية</title>
-<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+<title>تحديد الموقع الاحترافي</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.5/dist/leaflet.css"
+ integrity="sha256-sA+z0YefPZ1t5gQ2n3nXzOIvPp5r7Wc9p3rV0sA0hYQ="
+ crossorigin=""/>
+
 <style>
-  body {margin:0; font-family:sans-serif; background:#667eea; color:#fff;}
-  h1{text-align:center; margin:10px;}
-  #map{height:80vh; width:100%;}
-  #info {padding:10px; text-align:center; background:rgba(0,0,0,0.5);}
-  #placename {font-size:1.2em; font-weight:bold;}
-  #accuracy {font-weight:bold;}
-  #followBtn {
-    padding:8px 15px;
-    font-size:16px;
-    border:none;
-    border-radius:5px;
-    cursor:pointer;
-    background:#2ecc71;
-    color:white;
-    margin-left:10px;
-  }
-  #followBtn.following{background:#e74c3c;}
+body {
+    margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; 
+    background: #f5f5f5; text-align:center;
+}
+
+#map {
+    height: 95vh;
+    width: 100%;
+}
+
+#locationName {
+    position: absolute;
+    top: 10px; left: 50%; transform: translateX(-50%);
+    background: rgba(255,255,255,0.9);
+    padding: 10px 20px; border-radius: 10px;
+    font-size: 18px; font-weight: bold;
+    z-index: 1000;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+}
+
+.leaflet-marker-icon.arrow-marker {
+    transform-origin: center;
+    transition: transform 0.3s ease;
+}
 </style>
 </head>
 <body>
-<h1>تتبع الموقع بدقة عالية</h1>
-<div id="info">
-  <span>الموقع الحالي: </span><span id="placename">يتم التحديد...</span>
-  <span> | الدقة: </span><span id="accuracy">0</span> متر
-  <button id="followBtn">متابعة موقعي</button>
-</div>
+
+<div id="locationName">جارٍ تحديد الموقع...</div>
 <div id="map"></div>
 
-<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-<script>
-let map = L.map('map').setView([0,0],18);
-let marker = null;
-let follow = true; // التتبع مفعل تلقائياً
-let mapDraggedByUser = false;
+<script src="https://unpkg.com/leaflet@1.9.5/dist/leaflet.js"
+ integrity="sha256-0VZ4v8fCw8Zt6w0QGxk3UjJvHVb+6wQ4LYzF1yA2Z3U="
+ crossorigin=""></script>
 
-// استخدم خرائط OSM عالية الدقة
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
-  maxZoom:19,
-  attribution:'© OpenStreetMap'
+<script>
+// إعداد الخريطة
+const map = L.map('map', { zoomControl: true }).setView([0,0], 17);
+let userMarker = null;
+
+// طبقة OpenStreetMap مع تفاصيل عالية
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 22,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
 }).addTo(map);
 
-const placenameElem = document.getElementById('placename');
-const accuracyElem = document.getElementById('accuracy');
-const followBtn = document.getElementById('followBtn');
+// عنصر عرض اسم المكان
+const locationNameDiv = document.getElementById('locationName');
 
-// أيقونة سهم دائري متجهة لاتجاه الحركة
+// أيقونة السهم مع شعاع ليزر أمامه
 const arrowIcon = L.divIcon({
-  html: '<div style="transform: rotate(0deg); width:20px; height:20px; background:#e74c3c; clip-path: polygon(50% 0%, 0% 100%, 100% 100%);"></div>',
-  iconSize:[20,20],
-  className:''
+    className: 'arrow-marker',
+    html: `<div style="position:relative; width:30px; height:30px;">
+           <div style="width:0;height:0;border-left:15px solid transparent;
+                       border-right:15px solid transparent;
+                       border-bottom:30px solid red;
+                       transform-origin:center;"></div>
+           <div style="position:absolute; top:30px; left:14px;
+                       width:2px; height:40px; background:rgba(255,0,0,0.4); border-radius:1px;"></div>
+           </div>`,
+    iconSize: [30, 50],
+    iconAnchor: [15, 25]
 });
 
-// جلب اسم المكان باستخدام Nominatim
-async function reverseGeocode(lat, lon){
-  try{
-    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=18`);
-    const data = await res.json();
-    return data.display_name || 'غير محدد';
-  }catch(e){
-    return 'غير محدد';
-  }
+// دالة تحديث اسم المكان باستخدام Nominatim
+async function updatePlaceName(lat, lon){
+    try {
+        const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}`);
+        const data = await response.json();
+        locationNameDiv.textContent = data.display_name || "مكان غير معروف";
+    } catch(e) {
+        locationNameDiv.textContent = "خطأ في تحديد المكان";
+    }
 }
 
-// تحديث موقع المستخدم
-function updatePosition(position){
-  const {latitude, longitude, accuracy, heading} = position.coords;
-  accuracyElem.textContent = accuracy.toFixed(1);
-
-  if(marker){
-    marker.setLatLng([latitude,longitude]);
-    // تدوير السهم حسب الاتجاه
-    const angle = heading !== null ? heading : 0;
-    marker.getElement().style.transform = `rotate(${angle}deg)`;
-  } else {
-    marker = L.marker([latitude,longitude], {icon: arrowIcon}).addTo(map);
-  }
-
-  // تحريك الخريطة فقط إذا المستخدم لم يسحبها بيده
-  if(follow && !mapDraggedByUser){
-    map.setView([latitude,longitude],18);
-  }
-
-  reverseGeocode(latitude,longitude).then(name=>{
-    placenameElem.textContent = name;
-  });
+// فلترة وتحسين دقة المواقع
+let lastPosition = null;
+function isValidPosition(newPos){
+    if(!lastPosition) return true;
+    const dist = map.distance([lastPosition.latitude, lastPosition.longitude], [newPos.latitude, newPos.longitude]);
+    return newPos.accuracy < 50 && dist > 0.5; // تجاهل القراءات الضعيفة جداً
 }
 
-// معالجة الأخطاء
-function handleError(err){
-  placenameElem.textContent = "حدث خطأ: " + err.message;
-}
-
-// مراقبة الموقع بشكل مستمر
+// متابعة الموقع بدقة عالية
 if(navigator.geolocation){
-  navigator.geolocation.watchPosition(updatePosition, handleError, {
-    enableHighAccuracy:true,
-    maximumAge:0,
-    timeout:20000
-  });
+    navigator.geolocation.watchPosition(
+        (pos)=>{
+            const coords = pos.coords;
+
+            if(!isValidPosition(coords)) return;
+
+            lastPosition = coords;
+
+            // تحديث اسم المكان
+            updatePlaceName(coords.latitude, coords.longitude);
+
+            // إنشاء أو تحديث الـMarker
+            if(!userMarker){
+                userMarker = L.marker([coords.latitude, coords.longitude], {icon: arrowIcon, rotationAngle: coords.heading || 0}).addTo(map);
+                map.setView([coords.latitude, coords.longitude], 18);
+            } else {
+                userMarker.setLatLng([coords.latitude, coords.longitude]);
+                userMarker.getElement().style.transform = `rotate(${coords.heading || 0}deg)`;
+            }
+
+            // تحديث الخريطة تلقائياً إذا لم يقم المستخدم بتحريكها
+            if(!map.dragging._draggable._moving){
+                map.setView([coords.latitude, coords.longitude]);
+            }
+
+        },
+        (err)=>{
+            console.error(err);
+            locationNameDiv.textContent = "تعذر الحصول على الموقع.";
+        },
+        {
+            enableHighAccuracy: true,
+            maximumAge: 0,
+            timeout: 15000
+        }
+    );
 } else {
-  placenameElem.textContent = "متصفحك لا يدعم تحديد الموقع";
+    alert("متصفحك لا يدعم خدمة تحديد الموقع.");
 }
-
-// زر تفعيل/إيقاف متابعة الموقع
-followBtn.addEventListener('click', ()=>{
-  follow = !follow;
-  mapDraggedByUser = !follow; // عند إيقاف التتبع يمكن التحريك بحرية
-  followBtn.textContent = follow ? "متابعة موقعي" : "تم إيقاف التتبع";
-  followBtn.classList.toggle('following', !follow);
-});
-
-// اكتشاف سحب الخريطة بيد المستخدم
-map.on('dragstart', ()=>{
-  mapDraggedByUser = true;
-});
-map.on('zoomstart', ()=>{
-  mapDraggedByUser = true;
-});
 </script>
+
 </body>
 </html>
