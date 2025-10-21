@@ -122,6 +122,7 @@
     transition: 0.3s;
     z-index: 9999;
   }
+
   #followBtn:hover {
     background: #005cd1;
   }
@@ -132,7 +133,7 @@
 <div id="placenameBox">
   <span class="status-indicator"></span>
   <span class="location-icon">📍</span>
-  الموقع الحالي حقيقي: <span id="placename">جارٍ تحديد موقعك بدقة...</span>
+  الموقع الحالي: <span id="placename">جارٍ تحديد موقعك بدقة...</span>
 </div>
 
 <div id="map"></div>
@@ -148,11 +149,13 @@ let currentPlace = "";
 let lastUpdateTime = 0;
 const UPDATE_INTERVAL = 1000;
 
+// خريطة OSM
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   maxZoom: 20,
   attribution: '© OpenStreetMap'
 }).addTo(map);
 
+// أيقونة الموقع
 const bluePinIcon = L.divIcon({
   className: "custom-pin",
   html: `
@@ -166,11 +169,13 @@ const bluePinIcon = L.divIcon({
   iconAnchor: [16, 32],
 });
 
+// إيقاف التتبع لما المستخدم يحرك الخريطة
 map.on('movestart', () => {
   isFollowing = false;
   followBtn.innerHTML = "▶️ تتبع موقعي من جديد";
 });
 
+// تحسين الموقع
 let positionHistory = [];
 function refinePosition(position) {
   const { latitude, longitude, accuracy } = position.coords;
@@ -190,33 +195,47 @@ function refinePosition(position) {
   return { lat: lat / totalWeight, lng: lng / totalWeight };
 }
 
+// 🔍 دالة جلب اسم المكان الحقيقي بدقة عالية
 async function getAccurateLocationName(lat, lon) {
   try {
-    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=19&addressdetails=1`);
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=20&addressdetails=1&accept-language=ar`
+    );
     const data = await res.json();
     const addr = data.address || {};
-    let details = [];
-    if (addr.road) details.push(addr.road);
-    if (addr.neighbourhood) details.push(addr.neighbourhood);
-    if (addr.suburb) details.push(addr.suburb);
-    if (addr.village || addr.town || addr.city) details.push(addr.village || addr.town || addr.city);
-    if (addr.state) details.push(addr.state);
-    if (addr.country) details.push(addr.country);
-    return details.join("، ") || "موقع غير معروف";
-  } catch {
-    return "جارٍ تحديد الموقع...";
+
+    const street = addr.road || addr.pedestrian || addr.highway || "";
+    const area = addr.neighbourhood || addr.suburb || addr.village || "";
+    const city = addr.town || addr.city || addr.county || "";
+    const state = addr.state || "";
+    const country = addr.country || "";
+
+    let name = "";
+    if (street && city) name = `${street}، ${city}`;
+    else if (street && area) name = `${street}، ${area}`;
+    else if (area && city) name = `${area}، ${city}`;
+    else name = data.display_name || "موقع غير معروف";
+
+    if (name.length > 60) {
+      const parts = name.split("،");
+      name = parts.slice(0, 3).join("، ");
+    }
+
+    return name;
+  } catch (error) {
+    console.error("خطأ في جلب العنوان:", error);
+    return "جارٍ تحديد الموقع بدقة...";
   }
 }
 
+// تحديث الموقع
 async function updatePosition(position) {
   const now = Date.now();
   if (now - lastUpdateTime < UPDATE_INTERVAL) return;
   lastUpdateTime = now;
 
   const refined = refinePosition(position);
-  if (isFollowing) {
-    map.setView([refined.lat, refined.lng], 18, { animate: true });
-  }
+  if (isFollowing) map.setView([refined.lat, refined.lng], 18, { animate: true });
 
   if (!marker) marker = L.marker([refined.lat, refined.lng], { icon: bluePinIcon }).addTo(map);
   else marker.setLatLng([refined.lat, refined.lng]);
@@ -230,16 +249,19 @@ async function updatePosition(position) {
   }
 }
 
+// معالجة الخطأ
 function handleError(e) {
   placenameElem.textContent = "تعذّر تحديد الموقع، تحقق من GPS";
   console.error("خطأ:", e);
 }
 
+// زر إعادة التتبع
 followBtn.addEventListener("click", () => {
   isFollowing = true;
   followBtn.innerHTML = "🔄 جاري تتبع موقعك...";
 });
 
+// تشغيل GPS
 if (navigator.geolocation) {
   navigator.geolocation.watchPosition(updatePosition, handleError, {
     enableHighAccuracy: true,
