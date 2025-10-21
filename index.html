@@ -5,52 +5,87 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>خريطة مصر الذكية - تحديد المسار بين القرى والمدن</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.css" />
 <style>
     body {
         margin: 0;
-        font-family: 'Cairo', sans-serif;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         background: #f4f6f9;
         direction: rtl;
     }
     #controls {
-        background: #007bff;
+        background: linear-gradient(135deg, #007bff, #0056b3);
         padding: 15px;
         color: white;
         text-align: center;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
         position: relative;
         z-index: 1000;
     }
-    input {
-        margin: 8px;
-        padding: 12px;
+    h2 {
+        margin-bottom: 20px;
+        font-size: 1.4rem;
+        text-shadow: 1px 1px 2px rgba(0,0,0,0.2);
+    }
+    .input-group {
+        position: relative;
+        display: inline-block;
         width: 85%;
         max-width: 350px;
-        border: none;
-        border-radius: 6px;
-        font-size: 16px;
+        margin: 8px;
     }
-    input::placeholder { color: #ccc; }
+    input {
+        padding: 12px 15px;
+        width: 100%;
+        border: none;
+        border-radius: 8px;
+        font-size: 16px;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+        transition: all 0.3s ease;
+    }
+    input:focus {
+        outline: none;
+        box-shadow: 0 0 0 3px rgba(0,123,255,0.3);
+        transform: translateY(-2px);
+    }
+    input::placeholder { 
+        color: #aaa; 
+        font-size: 14px;
+    }
     button {
-        padding: 12px 24px;
-        background: #28a745;
+        padding: 12px 30px;
+        background: linear-gradient(135deg, #28a745, #20c997);
         color: white;
         border: none;
-        border-radius: 6px;
+        border-radius: 8px;
         cursor: pointer;
         font-size: 16px;
+        font-weight: bold;
+        margin-top: 10px;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        transition: all 0.3s ease;
     }
-    button:hover { background: #218838; }
+    button:hover { 
+        background: linear-gradient(135deg, #218838, #1e9e8a);
+        transform: translateY(-2px);
+        box-shadow: 0 6px 12px rgba(0,0,0,0.25);
+    }
+    button:active {
+        transform: translateY(0);
+    }
     #map {
         width: 100%;
         height: 75vh;
     }
     #status {
         text-align: center;
-        padding: 10px;
+        padding: 12px;
         font-weight: bold;
         background: white;
         color: #333;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        min-height: 20px;
+        transition: all 0.3s ease;
     }
     .suggestions {
         position: absolute;
@@ -59,17 +94,41 @@
         max-height: 160px;
         overflow-y: auto;
         z-index: 2000;
-        width: 85%;
-        max-width: 350px;
-        margin-left: 7%;
-        border-radius: 6px;
+        width: 100%;
+        border-radius: 0 0 8px 8px;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        display: none;
     }
     .suggestions div {
-        padding: 8px;
+        padding: 10px 15px;
         cursor: pointer;
+        border-bottom: 1px solid #f0f0f0;
+        transition: background 0.2s ease;
     }
     .suggestions div:hover {
-        background: #f1f1f1;
+        background: #e3f2fd;
+    }
+    .suggestions div:last-child {
+        border-bottom: none;
+    }
+    .hint {
+        font-size: 12px;
+        color: #e0e0e0;
+        margin-top: 8px;
+        font-style: italic;
+    }
+    
+    /* تحسينات للجوال */
+    @media (max-width: 768px) {
+        .input-group {
+            width: 90%;
+        }
+        input {
+            font-size: 16px; /* منع التكبير في iOS */
+        }
+        h2 {
+            font-size: 1.2rem;
+        }
     }
 </style>
 </head>
@@ -77,18 +136,19 @@
 
 <div id="controls">
     <h2>🚗 خريطتك الذكية في مصر</h2>
-    <div style="position: relative;">
-        <input id="start" placeholder="نقطة البداية (مثلاً: نكلا، المنيا)">
+    <div class="input-group">
+        <input id="start" placeholder="اكتب اسم البداية (مثلاً: نكلا، المنيا)">
         <div id="start-suggestions" class="suggestions"></div>
     </div>
-    <div style="position: relative;">
-        <input id="end" placeholder="نقطة النهاية (مثلاً: أم دينار، الجيزة)">
+    <div class="input-group">
+        <input id="end" placeholder="اكتب اسم النهاية (مثلاً: أم دينار، الجيزة)">
         <div id="end-suggestions" class="suggestions"></div>
     </div>
     <button onclick="getRoute()">احسب المسار</button>
+    <div class="hint">اكتب اسم القرية أو المدينة وسيظهر الاقتراحات تلقائياً</div>
 </div>
 
-<div id="status"></div>
+<div id="status">🔍 ابدأ بكتابة اسم المكان في الحقل أعلاه</div>
 <div id="map"></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -103,50 +163,115 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
 let routingControl = null;
 const statusDiv = document.getElementById('status');
 
-// إخفاء لوحات الاتجاهات الجانبية من Leaflet Routing Machine
+// إخفاء لوحات الاتجاهات الجانبية
 const removeRoutingPanels = () => {
     const panels = document.querySelectorAll('.leaflet-routing-container');
-    panels.forEach(p => p.style.display = 'none');
+    panels.forEach(p => {
+        p.style.display = 'none';
+        p.remove(); // إزالة كاملة بدلاً من مجرد إخفاء
+    });
 };
 
-// دالة جلب اقتراحات من Nominatim أثناء الكتابة
+// دالة جلب اقتراحات محسنة مع تأخير للبحث
 async function fetchSuggestions(query, suggestionBox) {
     if (query.length < 2) {
+        suggestionBox.style.display = 'none';
         suggestionBox.innerHTML = '';
         return;
     }
 
-    const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query + ', مصر')}&countrycodes=eg&limit=7&accept-language=ar`;
-    const response = await fetch(url, { headers: { 'User-Agent': 'EgyptSmartMap/1.0' } });
-    const data = await response.json();
+    try {
+        // إضافة "مصر" تلقائياً للبحث
+        const searchQuery = query.includes('مصر') ? query : `${query}, مصر`;
+        const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}&countrycodes=eg&limit=7&accept-language=ar`;
+        
+        const response = await fetch(url, { 
+            headers: { 'User-Agent': 'EgyptSmartMap/1.0' } 
+        });
+        const data = await response.json();
 
-    suggestionBox.innerHTML = '';
-    data.forEach(place => {
-        const div = document.createElement('div');
-        div.textContent = place.display_name;
-        div.onclick = () => {
-            const input = suggestionBox.previousElementSibling;
-            input.value = place.display_name;
-            suggestionBox.innerHTML = '';
-        };
-        suggestionBox.appendChild(div);
+        suggestionBox.innerHTML = '';
+        
+        if (data.length === 0) {
+            suggestionBox.style.display = 'none';
+            return;
+        }
+
+        data.forEach(place => {
+            const div = document.createElement('div');
+            // تقصير النص لعرض أفضل
+            const displayName = place.display_name.split(',').slice(0, 3).join(',');
+            div.textContent = displayName;
+            div.title = place.display_name; // عرض الاسم الكامل عند التمرير
+            div.onclick = () => {
+                const input = suggestionBox.previousElementSibling;
+                input.value = place.display_name;
+                suggestionBox.style.display = 'none';
+                suggestionBox.innerHTML = '';
+            };
+            suggestionBox.appendChild(div);
+        });
+        
+        suggestionBox.style.display = 'block';
+    } catch (error) {
+        console.error('Error fetching suggestions:', error);
+        suggestionBox.style.display = 'none';
+    }
+}
+
+// ربط الاقتراحات مع تحسينات الأداء
+function setupInputWithSuggestions(inputId, suggestionsId) {
+    const input = document.getElementById(inputId);
+    const suggestions = document.getElementById(suggestionsId);
+    let timeoutId;
+
+    input.addEventListener('input', (e) => {
+        clearTimeout(timeoutId);
+        timeoutId = setTimeout(() => {
+            fetchSuggestions(e.target.value, suggestions);
+        }, 300); // تأخير 300ms لتقليل طلبات API
+    });
+
+    // إخفاء الاقتراحات عند النقر خارجها
+    document.addEventListener('click', (e) => {
+        if (!input.contains(e.target) && !suggestions.contains(e.target)) {
+            suggestions.style.display = 'none';
+        }
+    });
+
+    // إظهار الاقتراحات عند التركيز إذا كان هناك نص
+    input.addEventListener('focus', () => {
+        if (input.value.length >= 2) {
+            fetchSuggestions(input.value, suggestions);
+        }
     });
 }
 
-// ربط الاقتراحات بالحقول
-document.getElementById('start').addEventListener('input', e => fetchSuggestions(e.target.value, document.getElementById('start-suggestions')));
-document.getElementById('end').addEventListener('input', e => fetchSuggestions(e.target.value, document.getElementById('end-suggestions')));
+// تهيئة الحقول
+setupInputWithSuggestions('start', 'start-suggestions');
+setupInputWithSuggestions('end', 'end-suggestions');
 
-// تحويل الاسم إلى إحداثيات
+// تحويل الاسم إلى إحداثيات مع تحسينات
 async function geocode(place) {
-    const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(place + ', مصر')}&countrycodes=eg&limit=1&accept-language=ar`;
-    const response = await fetch(url, { headers: { 'User-Agent': 'EgyptSmartMap/1.0' } });
+    if (!place.trim()) throw new Error('يرجى إدخال اسم المكان');
+    
+    // إضافة "مصر" تلقائياً إذا لم تكن موجودة
+    const searchPlace = place.includes('مصر') ? place : `${place}, مصر`;
+    const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchPlace)}&countrycodes=eg&limit=1&accept-language=ar`;
+    
+    const response = await fetch(url, { 
+        headers: { 'User-Agent': 'EgyptSmartMap/1.0' } 
+    });
     const data = await response.json();
-    if (data.length === 0) throw new Error(`لم يتم العثور على "${place}"`);
+    
+    if (data.length === 0) {
+        throw new Error(`لم يتم العثور على "${place}". جرب اسمًا أكثر تحديدًا.`);
+    }
+    
     return [parseFloat(data[0].lat), parseFloat(data[0].lon)];
 }
 
-// حساب المسار
+// حساب المسار مع تحسينات
 async function getRoute() {
     const startVal = document.getElementById('start').value.trim();
     const endVal = document.getElementById('end').value.trim();
@@ -163,7 +288,9 @@ async function getRoute() {
 
         statusDiv.textContent = '🚗 جاري حساب أفضل مسار...';
 
-        if (routingControl) map.removeControl(routingControl);
+        if (routingControl) {
+            map.removeControl(routingControl);
+        }
 
         routingControl = L.Routing.control({
             waypoints: [
@@ -175,32 +302,53 @@ async function getRoute() {
                 profile: 'driving'
             }),
             lineOptions: {
-                styles: [{ color: '#ff0000', weight: 6 }]
+                styles: [{ color: '#ff0000', weight: 6, opacity: 0.8 }]
             },
             addWaypoints: false,
             draggableWaypoints: false,
             fitSelectedRoutes: true,
             showAlternatives: false,
-            createMarker: function() { return null; } // بدون نقاط على الخريطة
+            createMarker: function() { return null; }
         }).addTo(map);
 
-        removeRoutingPanels();
+        // إخفاء اللوحات الجانبية بعد إضافة المسار
+        setTimeout(removeRoutingPanels, 100);
 
         routingControl.on('routesfound', e => {
             const summary = e.routes[0].summary;
             const dist = (summary.totalDistance / 1000).toFixed(1);
             const time = Math.round(summary.totalTime / 60);
-            statusDiv.textContent = `✅ المسافة: ${dist} كم | الزمن المتوقع: ${time} دقيقة`;
+            statusDiv.innerHTML = `✅ <strong>المسافة:</strong> ${dist} كم | <strong>الزمن المتوقع:</strong> ${time} دقيقة`;
+            removeRoutingPanels();
+        });
+
+        routingControl.on('routingerror', e => {
+            statusDiv.textContent = '❌ حدث خطأ في حساب المسار. حاول مرة أخرى.';
         });
 
     } catch (err) {
         console.error(err);
-        statusDiv.textContent = `❌ خطأ: ${err.message}`;
+        statusDiv.innerHTML = `❌ <strong>خطأ:</strong> ${err.message}`;
     }
 }
 
 // دعم الضغط على Enter
-document.addEventListener('keypress', e => { if (e.key === 'Enter') getRoute(); });
+document.addEventListener('keypress', e => { 
+    if (e.key === 'Enter') getRoute(); 
+});
+
+// إخفاء الاقتراحات عند التمرير
+map.whenReady(() => {
+    statusDiv.textContent = '🌍 الخريطة جاهزة. ابدأ بإدخال الأماكن!';
+});
+
+// منع إعادة تحميل الصفحة عند الضغط على Enter في الحقول
+document.getElementById('start').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') e.preventDefault();
+});
+document.getElementById('end').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') e.preventDefault();
+});
 </script>
 
 </body>
