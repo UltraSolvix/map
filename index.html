@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>موقعي الحالي</title>
+<title>موقعي الحالي - الشارع المباشر</title>
 
 <!-- مكتبة Leaflet -->
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
@@ -24,96 +24,53 @@
     top: 0;
     width: 100%;
     text-align: center;
-    background: rgba(0, 0, 0, 0.6);
+    background: rgba(0, 0, 0, 0.35);
     color: #fff;
-    font-size: 14px;
-    font-weight: 400;
-    padding: 12px 6px;
+    font-size: 16px;
+    font-weight: 500;
+    padding: 8px 6px;
     z-index: 1000;
-    backdrop-filter: blur(10px);
+    backdrop-filter: blur(8px);
     letter-spacing: 0.2px;
-    box-shadow: 0 2px 15px rgba(0, 0, 0, 0.3);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    transition: all 0.3s ease;
   }
 
   #placename {
-    color: #aee2ff;
-    font-weight: 500;
-    font-size: 13px;
-    transition: all 0.3s ease;
-    display: inline-block;
-    max-width: 70%;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    color: #d0f0ff;
+    font-weight: 600;
   }
 
   #map {
     height: 100vh;
     width: 100%;
   }
-  
-  /* تأثيرات للدبوس */
-  .pulse-effect {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 16px;
-    height: 16px;
-    background: rgba(66, 133, 244, 0.5);
-    border-radius: 50%;
-    animation: pulse 1.5s infinite;
-  }
-  
-  @keyframes pulse {
-    0% {
-      transform: translate(-50%, -50%) scale(1);
-      opacity: 1;
-    }
-    100% {
-      transform: translate(-50%, -50%) scale(2.5);
-      opacity: 0;
-    }
-  }
-  
-  /* تأثير تحديث النص */
-  .updating {
-    animation: textPulse 0.5s ease;
-  }
-  
-  @keyframes textPulse {
-    0% { opacity: 0.7; }
-    50% { opacity: 1; }
-    100% { opacity: 1; }
-  }
 </style>
 </head>
 <body>
 
 <div id="placenameBox">
-  📍 الموقع الحالي: <span id="placename">جارٍ التحديد...</span>
+  📍 الموقع الحالي: <span id="placename">جارٍ تحديد الشارع...</span>
 </div>
 
 <div id="map"></div>
 
 <script>
+// إنشاء الخريطة
 let map = L.map('map').setView([26.8206, 30.8025], 7);
 let marker = null;
 let placenameElem = document.getElementById("placename");
-let currentStreetName = "";
+let lastStreet = ""; // لتجنب التكرار
 
-// تحسين جودة الخريطة
+// طبقة الخريطة
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   maxZoom: 20,
   attribution: '© OpenStreetMap'
 }).addTo(map);
 
-// أيقونة دبوس جوجل الأزرق مع تأثير النبض
+// أيقونة دبوس زرقاء
 const bluePinIcon = L.divIcon({
-  className: "custom-pin",
+  className: "",
   html: `
-    <div class="pulse-effect"></div>
     <svg xmlns="http://www.w3.org/2000/svg" width="34" height="34" viewBox="0 0 24 24">
       <path fill="#4285F4" d="M12 2C8.1 2 5 5.1 5 9c0 5.2 7 13 7 13s7-7.8 7-13c0-3.9-3.1-7-7-7z"/>
       <circle cx="12" cy="9" r="3" fill="white"/>
@@ -123,54 +80,7 @@ const bluePinIcon = L.divIcon({
   iconAnchor: [15, 30],
 });
 
-// خوارزمية تحسين الدقة باستخدام متوسط المواقع
-let positionHistory = [];
-const MAX_HISTORY = 15;
-
-function calculateRefinedPosition(newPosition) {
-  const { latitude, longitude, accuracy } = newPosition.coords;
-  
-  positionHistory.push({
-    lat: latitude,
-    lng: longitude,
-    accuracy: accuracy,
-    timestamp: Date.now()
-  });
-  
-  // إزالة المواقع القديمة (أكثر من 30 ثانية)
-  positionHistory = positionHistory.filter(pos => 
-    Date.now() - pos.timestamp < 30000
-  );
-  
-  // إذا كان عدد المواقع قليل، استخدم أحدث موقع
-  if (positionHistory.length < 5) {
-    return {
-      lat: latitude,
-      lng: longitude,
-      accuracy: accuracy
-    };
-  }
-  
-  // حساب المتوسط المرجح بناءً على الدقة (مواقع أكثر دقة لها وزن أكبر)
-  let totalWeight = 0;
-  let weightedLat = 0;
-  let weightedLng = 0;
-  
-  positionHistory.forEach(pos => {
-    const weight = 1 / Math.pow(pos.accuracy, 2); // وزن تربيعي لتفضيل الدقة العالية
-    weightedLat += pos.lat * weight;
-    weightedLng += pos.lng * weight;
-    totalWeight += weight;
-  });
-  
-  return {
-    lat: weightedLat / totalWeight,
-    lng: weightedLng / totalWeight,
-    accuracy: Math.min(...positionHistory.map(p => p.accuracy))
-  };
-}
-
-// وظيفة إحضار اسم الشارع بدقة محسنة
+// دالة عكس الإحداثيات إلى اسم شارع
 async function reverseGeocode(lat, lon) {
   try {
     const res = await fetch(
@@ -178,73 +88,65 @@ async function reverseGeocode(lat, lon) {
     );
     const data = await res.json();
     const addr = data.address;
+    let street = addr.road || addr.residential || addr.neighbourhood || "";
+    let city = addr.city || addr.town || addr.village || addr.county || "";
 
-    // استخراج اسم الشارع فقط
-    let street = addr.road || addr.residential || addr.neighbourhood || addr.footway || "";
-    
-    if (street) {
-      return street;
-    } else {
-      // إذا لم يتم العثور على اسم شارع، حاول استخدام اسم المنطقة
-      return addr.suburb || addr.city_district || addr.quarter || "موقع غير معروف";
-    }
+    // نعيد اسم الشارع + المدينة (إن وُجدت)
+    if (street && city) return `${street} - ${city}`;
+    else if (street) return street;
+    else if (city) return city;
+    else return "شارع غير معروف";
   } catch {
-    return "جارٍ التحديد...";
+    return "تعذر تحديد الشارع";
   }
 }
 
-// تحديث الموقع الحي
-function updatePosition(position) {
-  const refinedPos = calculateRefinedPosition(position);
-  
-  // تحديث الخريطة والموقع
-  map.setView([refinedPos.lat, refinedPos.lng], 18, { animate: true });
+// تحديث الموقع لحظيًا
+async function updatePosition(position) {
+  const { latitude, longitude, accuracy } = position.coords;
 
+  // تجاهل النتائج غير الدقيقة جدًا
+  if (accuracy > 50) return;
+
+  // تحديث موقع الخريطة والدبوس
+  map.setView([latitude, longitude], 18, { animate: true });
   if (!marker) {
-    marker = L.marker([refinedPos.lat, refinedPos.lng], { icon: bluePinIcon }).addTo(map);
+    marker = L.marker([latitude, longitude], { icon: bluePinIcon }).addTo(map);
   } else {
-    marker.setLatLng([refinedPos.lat, refinedPos.lng]);
+    marker.setLatLng([latitude, longitude]);
   }
-  
-  // تحديث اسم الشارع
-  reverseGeocode(refinedPos.lat, refinedPos.lng).then((streetName) => {
-    // تحديث النص فقط إذا تغير اسم الشارع
-    if (streetName !== currentStreetName) {
-      currentStreetName = streetName;
-      placenameElem.textContent = streetName;
-      placenameElem.classList.add('updating');
-      setTimeout(() => {
-        placenameElem.classList.remove('updating');
-      }, 500);
-    }
-  });
+
+  // جلب اسم الشارع
+  const streetName = await reverseGeocode(latitude, longitude);
+
+  // لو الشارع اتغير فقط، نحدث العرض
+  if (streetName !== lastStreet) {
+    lastStreet = streetName;
+    placenameElem.textContent = streetName;
+  }
 }
 
 // في حالة الخطأ
 function handleError(error) {
-  placenameElem.textContent = "تعذر تحديد الموقع بدقة";
-  console.error("خطأ في تحديد الموقع:", error);
+  placenameElem.textContent = "تعذر تحديد الموقع (" + error.message + ")";
 }
 
-// تتبع الموقع باستمرار بدقة قصوى
+// تتبع الموقع كل ثانية بدقة عالية جدًا
 if (navigator.geolocation) {
   navigator.geolocation.watchPosition(updatePosition, handleError, {
     enableHighAccuracy: true,
     maximumAge: 0,
-    timeout: 5000
+    timeout: 1000
   });
-  
-  // تحديث إضافي كل ثانية باستخدام البيانات المخزنة
+
+  // فحص كل ثانية لتحسين سرعة التحديث
   setInterval(() => {
-    if (positionHistory.length > 0) {
-      const latestPosition = {
-        coords: {
-          latitude: positionHistory[positionHistory.length - 1].lat,
-          longitude: positionHistory[positionHistory.length - 1].lng,
-          accuracy: positionHistory[positionHistory.length - 1].accuracy
-        }
-      };
-      updatePosition(latestPosition);
+    if (marker) {
+      navigator.geolocation.getCurrentPosition(updatePosition, handleError, {
+        enableHighAccuracy: true,
+        maximumAge: 0,
+        timeout: 1000
+      });
     }
   }, 1000);
 } else {
