@@ -3,12 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>خريطة حرة ثلاثية الأبعاد</title>
-<script src="https://api.mapbox.com/mapbox-gl-js/v2.22.0/mapbox-gl.js"></script>
-<link href="https://api.mapbox.com/mapbox-gl-js/v2.22.0/mapbox-gl.css" rel="stylesheet" />
+<title>خريطة الموقع المتقدمة</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <style>
-body { margin:0; padding:0; height:100%; font-family:sans-serif; }
-#mapContainer { position:absolute; top:0; bottom:0; width:100%; }
+html, body { margin:0; padding:0; height:100%; font-family:sans-serif; background:#f0f0f0; }
+#mapContainer { height:100%; width:100%; touch-action: none; }
 .place-name {
     position:absolute;
     top:10px;
@@ -22,8 +21,9 @@ body { margin:0; padding:0; height:100%; font-family:sans-serif; }
     color:#2c3e50;
     z-index:1000;
     pointer-events:none;
-    box-shadow:0 4px 8px rgba(0,0,0,0.2);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
     backdrop-filter: blur(5px);
+    transition: all 0.3s;
 }
 </style>
 </head>
@@ -32,55 +32,81 @@ body { margin:0; padding:0; height:100%; font-family:sans-serif; }
 <div id="mapContainer"></div>
 <div class="place-name" id="placeName">جاري تحديد موقعك...</div>
 
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-mapboxgl.accessToken = 'YOUR_MAPBOX_ACCESS_TOKEN';
+let map = L.map('mapContainer', { 
+    zoomControl:true,
+    gestureHandling:true,
+}).setView([30.0444,31.2357],17);
 
-const map = new mapboxgl.Map({
-    container: 'mapContainer',
-    style: 'mapbox://styles/mapbox/streets-v12',
-    center: [31.2357,30.0444],
-    zoom: 17,
-    pitch: 45,
-    bearing: 0, // اتجاه الشمال
-    dragRotate: true, // يسمح بتدوير الخريطة
-    touchZoomRotate: true // يسمح بالتكبير والتدوير باللمس
-});
-
-let userMarker = null;
+let marker = null;
 let userCoords = null;
+let targetCoords = null;
 
+// إضافة طبقات خريطة OpenStreetMap
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap',
+    maxZoom: 22
+}).addTo(map);
+
+// طبقة HikeBike للتفاصيل
+L.tileLayer('https://tiles.wmflabs.org/hikebike/{z}/{x}/{y}.png', {
+    maxZoom: 20,
+    opacity:0.4
+}).addTo(map);
+
+// اكتشاف التفاعل للمستخدم
+let userInteracted = false;
+map.on('movestart', ()=>{ userInteracted = true; });
+map.on('zoomstart', ()=>{ userInteracted = true; });
+map.on('touchstart', ()=>{ userInteracted = true; });
+
+// تحريك العلامة بسلاسة
+function animateMarker(){
+    if(!marker || !targetCoords) return;
+
+    const current = marker.getLatLng();
+    const latDiff = targetCoords[0] - current.lat;
+    const lngDiff = targetCoords[1] - current.lng;
+    const step = 0.25; // تحريك أسرع عند السرعات العالية
+
+    const newLat = current.lat + latDiff * step;
+    const newLng = current.lng + lngDiff * step;
+
+    marker.setLatLng([newLat, newLng]);
+
+    if(!userInteracted){
+        map.panTo([newLat, newLng], {animate:false});
+    }
+
+    requestAnimationFrame(animateMarker);
+}
+
+// تتبع الموقع
 if(navigator.geolocation){
     navigator.geolocation.watchPosition(async (pos)=>{
-        userCoords = [pos.coords.longitude, pos.coords.latitude];
+        targetCoords = [pos.coords.latitude, pos.coords.longitude];
+        userCoords = [...targetCoords];
 
-        // إضافة/تحديث العلامة
-        if(!userMarker){
-            userMarker = new mapboxgl.Marker().setLngLat(userCoords).addTo(map);
-        } else {
-            userMarker.setLngLat(userCoords);
+        if(!marker){
+            marker = L.marker(userCoords).addTo(map);
+            animateMarker();
         }
 
         // تحديث اسم المكان فقط
         try{
-            const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${userCoords[1]}&lon=${userCoords[0]}&zoom=18&accept-language=ar`);
+            const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${targetCoords[0]}&lon=${targetCoords[1]}&zoom=18&accept-language=ar`);
             const data = await res.json();
             document.getElementById('placeName').textContent = data.display_name || 'غير متاح';
         }catch{
             document.getElementById('placeName').textContent = 'غير متاح';
         }
 
-        // تحريك الخريطة بسلاسة خلف العلامة إذا لم تتفاعل
-        if(!userInteracted) map.easeTo({center: userCoords, duration: 1000});
-
-    }, (err)=>{ console.error('خطأ في تحديد الموقع:', err); }, { enableHighAccuracy:true, maximumAge:0, timeout:5000 });
+    }, (err)=>{
+        console.error('خطأ في تحديد الموقع:', err);
+    }, { enableHighAccuracy:true, maximumAge:0, timeout:5000 });
 }
-
-// اكتشاف تفاعل المستخدم
-let userInteracted = false;
-map.on('dragstart', ()=>{ userInteracted = true; });
-map.on('rotate', ()=>{ userInteracted = true; });
-map.on('zoomstart', ()=>{ userInteracted = true; });
-
 </script>
+
 </body>
 </html>
