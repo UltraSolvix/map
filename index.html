@@ -66,6 +66,7 @@ let map = L.map('map').setView([26.8206, 30.8025], 7);
 let marker = null;
 let accuracyElem = document.getElementById("accuracy");
 let placenameElem = document.getElementById("placename");
+let firstLocationUpdate = true; // ✅ لتحديد أول مرة فقط
 
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   maxZoom: 20,
@@ -110,14 +111,15 @@ async function reverseGeocode(lat, lon) {
 function updatePosition(position) {
   const { latitude, longitude, accuracy } = position.coords;
 
-  // عرض الدقة
   accuracyElem.textContent = `دقة الموقع: ${accuracy.toFixed(1)} متر`;
 
-  // تحسين الدقة (يتجاهل المواقع الضعيفة فوق 30 متر)
-  if (accuracy > 30) return;
+  if (accuracy > 50) return; // تجاهل المواقع الضعيفة جدًا
 
-  // تحديث الخريطة والموقع
-  map.setView([latitude, longitude], 18, { animate: true });
+  // تحريك الخريطة فقط في أول مرة
+  if (firstLocationUpdate) {
+    map.setView([latitude, longitude], 18, { animate: true });
+    firstLocationUpdate = false;
+  }
 
   if (!marker) {
     marker = L.marker([latitude, longitude], { icon: bluePinIcon }).addTo(map);
@@ -125,18 +127,16 @@ function updatePosition(position) {
     marker.setLatLng([latitude, longitude]);
   }
 
-  // تحديث اسم الشارع
+  // تحديث اسم الشارع بدقة
   reverseGeocode(latitude, longitude).then((name) => {
     placenameElem.textContent = name;
   });
 }
 
-// في حالة الخطأ
 function handleError(error) {
-  placenameElem.textContent = "تعذر تحديد الموقع بدقة (" + error.message + ")";
+  placenameElem.textContent = "تعذر تحديد الموقع (" + error.message + ")";
 }
 
-// تتبع الموقع باستمرار بدقة قصوى
 if (navigator.geolocation) {
   navigator.geolocation.watchPosition(updatePosition, handleError, {
     enableHighAccuracy: true,
@@ -144,7 +144,7 @@ if (navigator.geolocation) {
     timeout: 8000,
   });
 } else {
-  placenameElem.textContent = "المتصفح لا يدعم تحديد الموقع الجغرافي.";
+  placenameElem.textContent = "المتصفح لا يدعم تحديد الموقع.";
 }
 </script>
 
