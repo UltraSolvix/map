@@ -3,274 +3,91 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>موقعي الحالي</title>
-
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<title>خريطة الموقع الدقيق مع اسم الشارع</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
 <style>
-  body {
-    margin: 0;
-    padding: 0;
-    font-family: 'Segoe UI', Tahoma, sans-serif;
-    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-    height: 100vh;
-    overflow: hidden;
-  }
-
-  #placenameBox {
-    position: fixed;
-    top: 0;
-    width: 100%;
-    text-align: center;
-    background: rgba(0, 0, 0, 0.75);
-    color: #fff;
-    font-size: 15px;
-    font-weight: 500;
-    padding: 15px 6px;
-    z-index: 1000;
-    backdrop-filter: blur(12px);
-    box-shadow: 0 3px 20px rgba(0, 0, 0, 0.4);
-    border-bottom: 1px solid rgba(255,255,255,0.15);
-  }
-
-  #placename {
-    color: #aee2ff;
-    font-weight: 600;
-    font-size: 16px;
-    transition: all 0.3s ease;
-    display: inline-block;
-    max-width: 80%;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    margin-right: 5px;
-  }
-
-  #map {
-    height: 100vh;
-    width: 100%;
-    margin-top: 50px;
-  }
-
-  .pulse-effect {
+  html, body { height: 100%; margin: 0; padding: 0; }
+  #map { height: 100%; }
+  #location {
     position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 18px;
-    height: 18px;
-    background: rgba(66, 133, 244, 0.6);
-    border-radius: 50%;
-    animation: pulse 1.2s infinite;
-    z-index: -1;
-  }
-
-  @keyframes pulse {
-    0% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
-    100% { transform: translate(-50%, -50%) scale(2.8); opacity: 0; }
-  }
-
-  .updating {
-    animation: textHighlight 0.6s ease;
-  }
-
-  @keyframes textHighlight {
-    0% { color: #ffd479; transform: scale(1.05); }
-    100% { color: #aee2ff; transform: scale(1); }
-  }
-
-  .location-icon {
-    display: inline-block;
-    margin-left: 8px;
-    animation: bounce 2s infinite;
-  }
-
-  @keyframes bounce {
-    0%,100% { transform: translateY(0); }
-    50% { transform: translateY(-2px); }
-  }
-
-  .status-indicator {
-    display: inline-block;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: #4CAF50;
-    margin-right: 8px;
-    animation: statusPulse 2s infinite;
-  }
-
-  @keyframes statusPulse {
-    0%,100% { opacity: 1; }
-    50% { opacity: 0.5; }
-  }
-
-  #followBtn {
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    background: #0078ff;
-    color: white;
-    border: none;
-    padding: 10px 18px;
-    border-radius: 25px;
-    font-size: 14px;
-    font-weight: 600;
-    cursor: pointer;
-    box-shadow: 0 3px 10px rgba(0,0,0,0.3);
-    transition: 0.3s;
+    top: 10px;
+    right: 10px;
+    background: rgba(255,255,255,0.9);
+    padding: 8px 14px;
+    border-radius: 10px;
+    box-shadow: 0 0 10px rgba(0,0,0,0.2);
+    font-family: "Cairo", sans-serif;
+    font-size: 16px;
+    direction: rtl;
     z-index: 9999;
-  }
-
-  #followBtn:hover {
-    background: #005cd1;
   }
 </style>
 </head>
 <body>
 
-<div id="placenameBox">
-  <span class="status-indicator"></span>
-  <span class="location-icon">📍</span>
-  الموقع الحالي: <span id="placename">جارٍ تحديد موقعك بدقة...</span>
-</div>
-
+<div id="location">📍 الموقع الحالي: <span id="address">جاري تحديد الموقع...</span></div>
 <div id="map"></div>
-<button id="followBtn">🔄 تتبع موقعي</button>
 
 <script>
-let map = L.map('map').setView([26.8206, 30.8025], 7);
-let marker = null;
-let placenameElem = document.getElementById("placename");
-let followBtn = document.getElementById("followBtn");
-let isFollowing = true;
-let currentPlace = "";
-let lastUpdateTime = 0;
-const UPDATE_INTERVAL = 1000;
+  const map = L.map('map').setView([30.0444, 31.2357], 14);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; خريطة من OpenStreetMap'
+  }).addTo(map);
 
-// خريطة OSM
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  maxZoom: 20,
-  attribution: '© OpenStreetMap'
-}).addTo(map);
+  let marker;
 
-// أيقونة الموقع
-const bluePinIcon = L.divIcon({
-  className: "custom-pin",
-  html: `
-    <div class="pulse-effect"></div>
-    <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24">
-      <path fill="#4285F4" d="M12 2C8.1 2 5 5.1 5 9c0 5.2 7 13 7 13s7-7.8 7-13c0-3.9-3.1-7-7-7z"/>
-      <circle cx="12" cy="9" r="3" fill="white"/>
-    </svg>
-  `,
-  iconSize: [32, 32],
-  iconAnchor: [16, 32],
-});
+  async function getAccurateLocationName(lat, lon) {
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=20&addressdetails=1&accept-language=ar`,
+        { headers: { 'User-Agent': 'MyMapApp/1.0 (contact@example.com)' } }
+      );
+      const data = await res.json();
+      const addr = data.address || {};
 
-// إيقاف التتبع لما المستخدم يحرك الخريطة
-map.on('movestart', () => {
-  isFollowing = false;
-  followBtn.innerHTML = "▶️ تتبع موقعي من جديد";
-});
+      const street = addr.road || addr.pedestrian || addr.highway || "";
+      const area = addr.neighbourhood || addr.suburb || addr.village || "";
+      const city = addr.town || addr.city || addr.county || "";
+      let name = street && city ? `${street}، ${city}` :
+                 street && area ? `${street}، ${area}` :
+                 area && city ? `${area}، ${city}` :
+                 data.display_name || "موقع غير معروف";
 
-// تحسين الموقع
-let positionHistory = [];
-function refinePosition(position) {
-  const { latitude, longitude, accuracy } = position.coords;
-  const now = Date.now();
-  positionHistory.push({ lat: latitude, lng: longitude, acc: accuracy, t: now });
-  positionHistory = positionHistory.filter(p => now - p.t < 30000);
-
-  if (positionHistory.length < 3) return { lat: latitude, lng: longitude };
-  
-  let totalWeight = 0, lat = 0, lng = 0;
-  positionHistory.forEach(p => {
-    const w = 1 / Math.pow(p.acc + 1, 1.2);
-    totalWeight += w;
-    lat += p.lat * w;
-    lng += p.lng * w;
-  });
-  return { lat: lat / totalWeight, lng: lng / totalWeight };
-}
-
-// 🔍 دالة جلب اسم المكان الحقيقي بدقة عالية
-async function getAccurateLocationName(lat, lon) {
-  try {
-    const res = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=20&addressdetails=1&accept-language=ar`
-    );
-    const data = await res.json();
-    const addr = data.address || {};
-
-    const street = addr.road || addr.pedestrian || addr.highway || "";
-    const area = addr.neighbourhood || addr.suburb || addr.village || "";
-    const city = addr.town || addr.city || addr.county || "";
-    const state = addr.state || "";
-    const country = addr.country || "";
-
-    let name = "";
-    if (street && city) name = `${street}، ${city}`;
-    else if (street && area) name = `${street}، ${area}`;
-    else if (area && city) name = `${area}، ${city}`;
-    else name = data.display_name || "موقع غير معروف";
-
-    if (name.length > 60) {
-      const parts = name.split("،");
-      name = parts.slice(0, 3).join("، ");
+      if (name.length > 60) name = name.split("،").slice(0, 3).join("، ");
+      return name;
+    } catch (err) {
+      console.error("خطأ أثناء جلب العنوان:", err);
+      return "جارٍ تحديد الموقع...";
     }
-
-    return name;
-  } catch (error) {
-    console.error("خطأ في جلب العنوان:", error);
-    return "جارٍ تحديد الموقع بدقة...";
   }
-}
 
-// تحديث الموقع
-async function updatePosition(position) {
-  const now = Date.now();
-  if (now - lastUpdateTime < UPDATE_INTERVAL) return;
-  lastUpdateTime = now;
-
-  const refined = refinePosition(position);
-  if (isFollowing) map.setView([refined.lat, refined.lng], 18, { animate: true });
-
-  if (!marker) marker = L.marker([refined.lat, refined.lng], { icon: bluePinIcon }).addTo(map);
-  else marker.setLatLng([refined.lat, refined.lng]);
-
-  const placeName = await getAccurateLocationName(refined.lat, refined.lng);
-  if (placeName !== currentPlace) {
-    currentPlace = placeName;
-    placenameElem.textContent = placeName;
-    placenameElem.classList.add("updating");
-    setTimeout(() => placenameElem.classList.remove("updating"), 600);
+  function updatePosition(lat, lon) {
+    if (marker) map.removeLayer(marker);
+    marker = L.marker([lat, lon]).addTo(map);
   }
-}
 
-// معالجة الخطأ
-function handleError(e) {
-  placenameElem.textContent = "تعذّر تحديد الموقع، تحقق من GPS";
-  console.error("خطأ:", e);
-}
+  // ✅ متابعة الموقع بدقة
+  navigator.geolocation.watchPosition(
+    async pos => {
+      const { latitude, longitude } = pos.coords;
+      updatePosition(latitude, longitude);
 
-// زر إعادة التتبع
-followBtn.addEventListener("click", () => {
-  isFollowing = true;
-  followBtn.innerHTML = "🔄 جاري تتبع موقعك...";
-});
+      // فقط أول مرة نركز الخريطة على موقع المستخدم
+      if (!map._userLocated) {
+        map.setView([latitude, longitude], 16);
+        map._userLocated = true;
+      }
 
-// تشغيل GPS
-if (navigator.geolocation) {
-  navigator.geolocation.watchPosition(updatePosition, handleError, {
-    enableHighAccuracy: true,
-    maximumAge: 0,
-    timeout: 8000
-  });
-} else {
-  placenameElem.textContent = "المتصفح لا يدعم GPS";
-}
+      const name = await getAccurateLocationName(latitude, longitude);
+      document.getElementById("address").textContent = name;
+    },
+    err => {
+      console.error(err);
+      document.getElementById("address").textContent = "تعذر تحديد الموقع";
+    },
+    { enableHighAccuracy: true, maximumAge: 0 }
+  );
 </script>
 
 </body>
