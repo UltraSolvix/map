@@ -1,860 +1,278 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>نظام التتبع الجغرافي المتقدم مع تخطيط المسار</title>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<style>
-body { 
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-    margin:0; 
-    padding:0; 
-    background:linear-gradient(135deg,#667eea 0%,#764ba2 100%); 
-    color:#333; 
-    min-height:100vh;
-    text-align:center;
-}
-.container{
-    max-width:1200px;
-    margin:0 auto;
-    background:white;
-    border-radius:15px;
-    box-shadow:0 10px 30px rgba(0,0,0,0.2);
-    padding:20px;
-    margin-top:20px;
-    display: flex;
-    flex-direction: column;
-    height: 95vh;
-}
-h1{color:#2c3e50;margin-bottom:20px;}
-.btn{
-    background:#3498db;
-    color:white;
-    border:none;
-    padding:12px 25px;
-    font-size:18px;
-    border-radius:50px;
-    cursor:pointer;
-    margin:10px;
-    box-shadow:0 4px 6px rgba(0,0,0,0.1);
-    transition:all 0.3s;
-}
-.btn:hover{
-    background:#2980b9;
-    transform:translateY(-2px);
-}
-.btn-success{background:#2ecc71;}
-.btn-danger{background:#e74c3c;}
-.btn-warning{background:#f39c12;}
-
-.location-info{
-    background:#f8f9fa;
-    border-radius:10px;
-    padding:15px;
-    margin:10px 0;
-    text-align:right;
-    display:none;
-}
-.map-container{
-    flex: 1;
-    width:100%;
-    border-radius:10px;
-    overflow:hidden;
-    margin:10px 0;
-    display:none;
-    box-shadow:0 4px 10px rgba(0,0,0,0.1);
-}
-.coordinates{
-    font-family:monospace;
-    background:#eee;
-    padding:5px 10px;
-    border-radius:5px;
-    direction:ltr;
-}
-.accuracy{font-weight:bold;color:#e74c3c;}
-.loader{
-    border:5px solid #f3f3f3;
-    border-top:5px solid #3498db;
-    border-radius:50%;
-    width:50px;
-    height:50px;
-    animation:spin 2s linear infinite;
-    margin:20px auto;
-    display:none;
-}
-@keyframes spin{
-    0%{transform:rotate(0deg);}
-    100%{transform:rotate(360deg);}
-}
-.error{
-    background:#f8d7da;
-    color:#721c24;
-    padding:15px;
-    border-radius:10px;
-    margin:20px 0;
-    display:none;
-}
-.route-form{
-    background:#f8f9fa;
-    border-radius:10px;
-    padding:15px;
-    margin:10px 0;
-    display: none;
-}
-.form-group{
-    margin-bottom:15px;
-    text-align:right;
-}
-.form-group label{
-    display:block;
-    margin-bottom:5px;
-    font-weight:bold;
-}
-.form-group input{
-    width:100%;
-    padding:10px;
-    border:1px solid #ddd;
-    border-radius:5px;
-    box-sizing:border-box;
-}
-.controls{
-    display:flex;
-    justify-content:space-between;
-    margin-top:10px;
-    flex-wrap: wrap;
-}
-#routeResult{
-    margin-top:15px;
-    padding:10px;
-    background:#e8f4fd;
-    border-radius:5px;
-    display:none;
-}
-#routeInfo{
-    text-align:right;
-}
-.route-table{
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 15px;
-    background: white;
-    border-radius: 10px;
-    overflow: hidden;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-}
-.route-table th{
-    background: #3498db;
-    color: white;
-    padding: 12px;
-    text-align: right;
-}
-.route-table td{
-    padding: 10px;
-    border-bottom: 1px solid #eee;
-}
-.route-table tr:last-child td{
-    border-bottom: none;
-}
-.progress-container{
-    margin-top: 10px;
-    background: #f0f0f0;
-    border-radius: 10px;
-    height: 20px;
-    overflow: hidden;
-}
-.progress-bar{
-    height: 100%;
-    background: linear-gradient(90deg, #2ecc71, #3498db);
-    border-radius: 10px;
-    transition: width 0.5s ease;
-    width: 0%;
-}
-.route-stats{
-    display: flex;
-    justify-content: space-between;
-    margin-top: 10px;
-    padding: 10px;
-    background: #f8f9fa;
-    border-radius: 10px;
-}
-.stat-item{
-    text-align: center;
-    flex: 1;
-}
-.stat-value{
-    font-size: 24px;
-    font-weight: bold;
-    color: #2c3e50;
-}
-.stat-label{
-    font-size: 14px;
-    color: #7f8c8d;
-}
-.navigation-controls{
-    display: flex;
-    justify-content: center;
-    gap: 10px;
-    margin-top: 15px;
-}
-.route-instructions{
-    max-height: 200px;
-    overflow-y: auto;
-    margin-top: 15px;
-    text-align: right;
-    padding: 10px;
-    background: #f8f9fa;
-    border-radius: 10px;
-}
-.instruction-step{
-    padding: 8px;
-    border-bottom: 1px solid #eee;
-    display: flex;
-    align-items: center;
-}
-.instruction-step:last-child{
-    border-bottom: none;
-}
-.instruction-icon{
-    margin-left: 10px;
-    font-size: 18px;
-}
-.instruction-completed{
-    color: #2ecc71;
-    text-decoration: line-through;
-    opacity: 0.7;
-}
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>تحديد الموقع الجغرافي</title>
+    <style>
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            margin: 0; 
+            padding: 0; 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+            color: #333; 
+            min-height: 100vh; 
+            text-align: center;
+        }
+        .container {
+            max-width: 100%;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            padding: 15px;
+            margin-top: 10px;
+            height: 95vh;
+            display: flex;
+            flex-direction: column;
+        }
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 10px;
+            font-size: 1.5rem;
+        }
+        .btn {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            font-size: 16px;
+            border-radius: 50px;
+            cursor: pointer;
+            margin: 5px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s;
+            z-index: 1000;
+            position: relative;
+        }
+        .btn:hover {
+            background: #2980b9;
+            transform: translateY(-2px);
+        }
+        .btn-success {
+            background: #2ecc71;
+        }
+        .place-name {
+            font-weight: bold;
+            font-size: 1.2rem;
+            color: #2c3e50;
+            margin: 10px 0;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            display: none;
+        }
+        .map-container {
+            flex-grow: 1;
+            width: 100%;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 10px 0;
+            display: none;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+            position: relative;
+        }
+        .loader {
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #3498db;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 2s linear infinite;
+            margin: 20px auto;
+            display: none;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+            display: none;
+        }
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+    </style>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 </head>
 <body>
-<div class="container">
-    <h1>نظام التتبع الجغرافي المتقدم مع تخطيط المسار</h1>
+    <div class="container">
+        <h1>تحديد الموقع الجغرافي</h1>
+        
+        <div class="controls">
+            <button id="getLocation" class="btn btn-success">تحديد موقعي</button>
+            <button id="stopTracking" class="btn" style="display:none;">إيقاف التتبع</button>
+        </div>
 
-    <div class="controls">
-        <button id="getLocation" class="btn btn-success">بدء التتبع</button>
-        <button id="stopTracking" class="btn btn-danger" style="display:none;">إيقاف التتبع</button>
-        <button id="showRouteForm" class="btn">تخطيط المسار</button>
-        <button id="clearRoute" class="btn btn-warning" style="display:none;">مسح المسار</button>
+        <div class="loader" id="loader"></div>
+        <div class="error" id="error"></div>
+
+        <div class="place-name" id="placeName"></div>
+
+        <div class="map-container" id="mapContainer"></div>
     </div>
 
-    <div class="loader" id="loader"></div>
-    <div class="error" id="error"></div>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        const getLocationBtn = document.getElementById('getLocation');
+        const stopTrackingBtn = document.getElementById('stopTracking');
+        const placeNameElem = document.getElementById('placeName');
+        const loader = document.getElementById('loader');
+        const errorDiv = document.getElementById('error');
+        const mapContainer = document.getElementById('mapContainer');
 
-    <div class="location-info" id="locationInfo">
-        <h2>تفاصيل موقعك</h2>
-        <p><strong>اسم المكان:</strong> <span id="placeName"></span></p>
-        <p><strong>خط العرض:</strong> <span id="latitude" class="coordinates"></span></p>
-        <p><strong>خط الطول:</strong> <span id="longitude" class="coordinates"></span></p>
-        <p><strong>الدقة:</strong> <span id="accuracy" class="accuracy"></span> متر</p>
-        <p><strong>السرعة:</strong> <span id="speed"></span> كم/ساعة</p>
-    </div>
+        let map;
+        let marker;
+        let watchId = null;
+        let isTracking = false;
+        let userInteracted = false;
 
-    <div class="route-form" id="routeForm">
-        <h2>تخطيط المسار</h2>
-        <div class="form-group">
-            <label for="startPoint">نقطة البداية:</label>
-            <input type="text" id="startPoint" placeholder="أدخل موقع البداية">
-            <button id="useCurrentLocation" class="btn" style="margin-top:5px; padding:5px 10px; font-size:14px;">استخدام موقعي الحالي</button>
-        </div>
-        <div class="form-group">
-            <label for="endPoint">نقطة النهاية:</label>
-            <input type="text" id="endPoint" placeholder="أدخل موقع النهاية">
-        </div>
-        <button id="calculateRoute" class="btn btn-success">بحث عن أفضل مسار</button>
-        <div id="routeResult">
-            <h3>تفاصيل المسار</h3>
-            <div id="routeInfo"></div>
-            
-            <div class="route-stats">
-                <div class="stat-item">
-                    <div class="stat-value" id="totalDistance">0</div>
-                    <div class="stat-label">المسافة الكلية</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-value" id="totalTime">0</div>
-                    <div class="stat-label">الوقت المتوقع</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-value" id="remainingDistance">0</div>
-                    <div class="stat-label">المسافة المتبقية</div>
-                </div>
-            </div>
-            
-            <div class="progress-container">
-                <div class="progress-bar" id="routeProgress"></div>
-            </div>
-            
-            <div class="navigation-controls">
-                <button id="startNavigation" class="btn btn-success">بدء الملاحة</button>
-                <button id="pauseNavigation" class="btn btn-warning" style="display:none;">إيقاف الملاحة</button>
-            </div>
-            
-            <div class="route-instructions" id="routeInstructions"></div>
-        </div>
-    </div>
-
-    <div class="map-container" id="mapContainer"></div>
-</div>
-
-<script>
-// المتغيرات العامة
-let map;
-let userMarker;
-let userCircle;
-let watchId;
-let isTracking = false;
-let routeLayer;
-let routeCoordinates = [];
-let routePolyline;
-let isNavigating = false;
-let navigationWatchId;
-let currentRoute;
-let completedRoutePoints = [];
-let routeSteps = [];
-let currentStepIndex = 0;
-
-// عناصر DOM
-const getLocationBtn = document.getElementById('getLocation');
-const stopTrackingBtn = document.getElementById('stopTracking');
-const showRouteFormBtn = document.getElementById('showRouteForm');
-const calculateRouteBtn = document.getElementById('calculateRoute');
-const clearRouteBtn = document.getElementById('clearRoute');
-const useCurrentLocationBtn = document.getElementById('useCurrentLocation');
-const startNavigationBtn = document.getElementById('startNavigation');
-const pauseNavigationBtn = document.getElementById('pauseNavigation');
-const locationInfo = document.getElementById('locationInfo');
-const latitudeElem = document.getElementById('latitude');
-const longitudeElem = document.getElementById('longitude');
-const accuracyElem = document.getElementById('accuracy');
-const speedElem = document.getElementById('speed');
-const placeNameElem = document.getElementById('placeName');
-const loader = document.getElementById('loader');
-const errorDiv = document.getElementById('error');
-const mapContainer = document.getElementById('mapContainer');
-const routeForm = document.getElementById('routeForm');
-const routeResult = document.getElementById('routeResult');
-const routeInfo = document.getElementById('routeInfo');
-const startPointInput = document.getElementById('startPoint');
-const endPointInput = document.getElementById('endPoint');
-const totalDistanceElem = document.getElementById('totalDistance');
-const totalTimeElem = document.getElementById('totalTime');
-const remainingDistanceElem = document.getElementById('remainingDistance');
-const routeProgressElem = document.getElementById('routeProgress');
-const routeInstructionsElem = document.getElementById('routeInstructions');
-
-// تهيئة الخريطة
-function initMap(lat, lng) {
-    if (map) {
-        map.remove();
-    }
-    
-    map = L.map('mapContainer').setView([lat, lng], 18);
-    
-    // إضافة طبقات الخريطة المتعددة
-    const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-    }).addTo(map);
-    
-    // إضافة طبقة الأقمار الصناعية
-    const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-        attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
-    });
-    
-    // إضافة طبقة تفصيلية للطرق
-    const transportLayer = L.tileLayer('https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png', {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, Tiles style by <a href="https://www.hotosm.org/" target="_blank">Humanitarian OpenStreetMap Team</a>'
-    });
-    
-    // إضافة عناصر التحكم في الطبقات
-    const baseMaps = {
-        "الخريطة العادية": osmLayer,
-        "الأقمار الصناعية": satelliteLayer,
-        "الطرق التفصيلية": transportLayer
-    };
-    
-    L.control.layers(baseMaps).addTo(map);
-    
-    // إضافة علامة المستخدم
-    const userIcon = L.divIcon({
-        className: 'user-location-marker',
-        html: '<div style="background-color: #e74c3c; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 5px rgba(0,0,0,0.5);"></div>',
-        iconSize: [16, 16],
-        iconAnchor: [8, 8]
-    });
-    
-    userMarker = L.marker([lat, lng], {icon: userIcon}).addTo(map);
-    
-    // إضافة دائرة الدقة
-    userCircle = L.circle([lat, lng], {
-        color: '#3498db',
-        fillColor: '#3498db',
-        fillOpacity: 0.1,
-        radius: 4 // دائرة صغيرة جداً للدقة العالية
-    }).addTo(map);
-    
-    mapContainer.style.display = 'block';
-}
-
-// بدء التتبع
-getLocationBtn.addEventListener('click', () => {
-    if (!navigator.geolocation) {
-        showError("متصفحك لا يدعم خدمة تحديد الموقع الجغرافي");
-        return;
-    }
-
-    loader.style.display = 'block';
-    errorDiv.style.display = 'none';
-    isTracking = true;
-    getLocationBtn.style.display = 'none';
-    stopTrackingBtn.style.display = 'inline-block';
-
-    watchId = navigator.geolocation.watchPosition(
-        async (pos) => {
-            loader.style.display = 'none';
-            
-            // تحديث الموقع في الوقت الحقيقي
-            updateLocation(pos);
-            
-            // إذا كنا في وضع الملاحة، تحديث المسار
-            if (isNavigating) {
-                updateRouteProgress(pos);
+        getLocationBtn.addEventListener('click', () => {
+            if (!navigator.geolocation) {
+                showError("متصفحك لا يدعم خدمة تحديد الموقع الجغرافي");
+                return;
             }
-        },
-        (err) => {
-            loader.style.display='none';
-            handleLocationError(err);
-        },
-        { 
-            enableHighAccuracy: true, 
-            maximumAge: 0, 
-            timeout: 5000 
-        }
-    );
-});
 
-// إيقاف التتبع
-stopTrackingBtn.addEventListener('click', () => {
-    if (watchId) {
-        navigator.geolocation.clearWatch(watchId);
-    }
-    isTracking = false;
-    getLocationBtn.style.display = 'inline-block';
-    stopTrackingBtn.style.display = 'none';
-});
-
-// استخدام الموقع الحالي كنقطة بداية
-useCurrentLocationBtn.addEventListener('click', () => {
-    if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition((position) => {
-            reverseGeocode(position.coords.latitude, position.coords.longitude)
-                .then(locationName => {
-                    startPointInput.value = locationName;
-                });
+            startTracking();
         });
-    }
-});
 
-// عرض نموذج تخطيط المسار
-showRouteFormBtn.addEventListener('click', () => {
-    routeForm.style.display = routeForm.style.display === 'block' ? 'none' : 'block';
-});
+        stopTrackingBtn.addEventListener('click', () => {
+            stopTracking();
+        });
 
-// حساب المسار
-calculateRouteBtn.addEventListener('click', async () => {
-    const startPoint = startPointInput.value;
-    const endPoint = endPointInput.value;
-    
-    if (!startPoint || !endPoint) {
-        showError("يرجى إدخال نقطتي البداية والنهاية");
-        return;
-    }
-    
-    loader.style.display = 'block';
-    
-    try {
-        // الحصول على إحداثيات نقطتي البداية والنهاية
-        const startCoords = await geocodeAddress(startPoint);
-        const endCoords = await geocodeAddress(endPoint);
-        
-        // حساب المسار باستخدام خدمة OSRM
-        const route = await calculateRoute(startCoords, endCoords);
-        
-        // حفظ المسار الحالي
-        currentRoute = route;
-        
-        // عرض المسار على الخريطة
-        displayRoute(route, startCoords, endCoords);
-        
-        // عرض معلومات المسار
-        displayRouteInfo(route);
-        
-        // إعداد تعليمات المسار
-        setupRouteInstructions(route);
-        
-        routeResult.style.display = 'block';
-        clearRouteBtn.style.display = 'inline-block';
-    } catch (error) {
-        showError("حدث خطأ أثناء حساب المسار: " + error.message);
-    } finally {
-        loader.style.display = 'none';
-    }
-});
+        function startTracking() {
+            loader.style.display = 'block';
+            errorDiv.style.display = 'none';
+            getLocationBtn.style.display = 'none';
+            stopTrackingBtn.style.display = 'inline-block';
+            isTracking = true;
 
-// مسح المسار
-clearRouteBtn.addEventListener('click', () => {
-    if (routeLayer) {
-        map.removeLayer(routeLayer);
-    }
-    if (routePolyline) {
-        map.removeLayer(routePolyline);
-    }
-    routeResult.style.display = 'none';
-    clearRouteBtn.style.display = 'none';
-    isNavigating = false;
-    startNavigationBtn.style.display = 'inline-block';
-    pauseNavigationBtn.style.display = 'none';
-    completedRoutePoints = [];
-    routeSteps = [];
-    currentStepIndex = 0;
-});
-
-// بدء الملاحة
-startNavigationBtn.addEventListener('click', () => {
-    if (!currentRoute) {
-        showError("لا يوجد مسار محدد لبدء الملاحة");
-        return;
-    }
-    
-    isNavigating = true;
-    startNavigationBtn.style.display = 'none';
-    pauseNavigationBtn.style.display = 'inline-block';
-    
-    // إعادة تهيئة نقاط المسار المكتملة
-    completedRoutePoints = [];
-    
-    // تحديث شريط التقدم
-    updateProgressBar(0);
-});
-
-// إيقاف الملاحة
-pauseNavigationBtn.addEventListener('click', () => {
-    isNavigating = false;
-    startNavigationBtn.style.display = 'inline-block';
-    pauseNavigationBtn.style.display = 'none';
-});
-
-// تحديث الموقع على الخريطة
-function updateLocation(position) {
-    const coords = position.coords;
-    const lat = coords.latitude;
-    const lng = coords.longitude;
-    
-    // إذا لم تكن الخريطة معدة بعد، قم بتهيئتها
-    if (!map) {
-        initMap(lat, lng);
-    }
-    
-    // تحديث العلامة والدائرة بسلاسة
-    if (userMarker) {
-        userMarker.setLatLng([lat, lng]);
-    }
-    
-    if (userCircle) {
-        userCircle.setLatLng([lat, lng]);
-        userCircle.setRadius(coords.accuracy || 4);
-    }
-    
-    // تحديث معلومات الموقع
-    displayLocation(position);
-    
-    // الحصول على اسم المكان
-    reverseGeocode(lat, lng);
-}
-
-// تحديث تقدم المسار أثناء الملاحة
-function updateRouteProgress(position) {
-    if (!currentRoute || !isNavigating) return;
-    
-    const userCoords = [position.coords.longitude, position.coords.latitude];
-    
-    // إضافة النقطة الحالية إلى المسار المكتمل
-    completedRoutePoints.push([position.coords.latitude, position.coords.longitude]);
-    
-    // رسم المسار المكتمل
-    if (completedRoutePoints.length > 1) {
-        if (routePolyline) {
-            map.removeLayer(routePolyline);
+            // استخدام watchPosition للتحديث المستمر
+            watchId = navigator.geolocation.watchPosition(
+                async (position) => {
+                    loader.style.display = 'none';
+                    const coords = position.coords;
+                    
+                    // عرض اسم المكان فقط - لا تظهر الإحداثيات
+                    await reverseGeocode(coords.latitude, coords.longitude);
+                    
+                    // عرض الخريطة مع التحديث السلس
+                    if (!map) {
+                        initializeMap(coords.latitude, coords.longitude);
+                    } else {
+                        // تحديث الموقع دون إعادة تحميل الخريطة
+                        updateMapPosition(coords.latitude, coords.longitude);
+                    }
+                },
+                (err) => {
+                    loader.style.display = 'none';
+                    handleLocationError(err);
+                },
+                { 
+                    enableHighAccuracy: true, 
+                    maximumAge: 1000,
+                    timeout: 10000 
+                }
+            );
         }
-        
-        routePolyline = L.polyline(completedRoutePoints, {
-            color: '#2ecc71',
-            weight: 6,
-            opacity: 0.8
-        }).addTo(map);
-    }
-    
-    // تحديث المسافة المتبقية وشريط التقدم
-    updateRemainingDistance(userCoords);
-    
-    // تحديث تعليمات المسار
-    updateRouteInstructions(position);
-}
 
-// تحديث المسافة المتبقية
-function updateRemainingDistance(userCoords) {
-    if (!currentRoute) return;
-    
-    const routeGeometry = currentRoute.routes[0].geometry.coordinates;
-    let minDistance = Infinity;
-    let closestPointIndex = -1;
-    
-    // إيجاد أقرب نقطة على المسار للمستخدم
-    for (let i = 0; i < routeGeometry.length; i++) {
-        const routePoint = routeGeometry[i];
-        const distance = calculateDistance(
-            userCoords[1], userCoords[0], 
-            routePoint[1], routePoint[0]
-        );
-        
-        if (distance < minDistance) {
-            minDistance = distance;
-            closestPointIndex = i;
+        function stopTracking() {
+            if (watchId) {
+                navigator.geolocation.clearWatch(watchId);
+                watchId = null;
+            }
+            isTracking = false;
+            getLocationBtn.style.display = 'inline-block';
+            stopTrackingBtn.style.display = 'none';
         }
-    }
-    
-    // حساب المسافة المتبقية (من أقرب نقطة إلى النهاية)
-    let remainingDistance = 0;
-    for (let i = closestPointIndex; i < routeGeometry.length - 1; i++) {
-        remainingDistance += calculateDistance(
-            routeGeometry[i][1], routeGeometry[i][0],
-            routeGeometry[i+1][1], routeGeometry[i+1][0]
-        );
-    }
-    
-    // تحديث واجهة المستخدم
-    remainingDistanceElem.textContent = (remainingDistance / 1000).toFixed(1);
-    
-    // تحديث شريط التقدم
-    const totalDistance = currentRoute.routes[0].distance;
-    const progress = ((totalDistance - remainingDistance) / totalDistance) * 100;
-    updateProgressBar(progress);
-}
 
-// تحديث شريط التقدم
-function updateProgressBar(progress) {
-    routeProgressElem.style.width = Math.min(progress, 100) + '%';
-}
-
-// تحديث تعليمات المسار
-function updateRouteInstructions(position) {
-    if (!currentRoute || !routeSteps.length) return;
-    
-    const userCoords = [position.coords.latitude, position.coords.longitude];
-    
-    // البحث عن الخطوة الحالية بناءً على موقع المستخدم
-    for (let i = currentStepIndex; i < routeSteps.length; i++) {
-        const step = routeSteps[i];
-        const stepCoords = step.maneuver.location;
-        const distance = calculateDistance(
-            userCoords[0], userCoords[1],
-            stepCoords[1], stepCoords[0]
-        );
-        
-        // إذا كان المستخدم قريباً من الخطوة (ضمن 50 متر)
-        if (distance < 50) {
-            currentStepIndex = i;
-            break;
+        // استخدام Nominatim API للحصول على اسم المكان فقط
+        async function reverseGeocode(lat, lng){
+            try{
+                const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&accept-language=ar`);
+                const data = await res.json();
+                placeNameElem.textContent = data.display_name || 'غير متاح';
+                placeNameElem.style.display = 'block';
+            }catch(e){
+                placeNameElem.textContent = 'غير متاح';
+                placeNameElem.style.display = 'block';
+            }
         }
-    }
-    
-    // تحديث عرض التعليمات
-    routeInstructionsElem.innerHTML = '';
-    routeSteps.forEach((step, index) => {
-        const instructionDiv = document.createElement('div');
-        instructionDiv.className = `instruction-step ${index < currentStepIndex ? 'instruction-completed' : ''}`;
-        
-        const icon = document.createElement('span');
-        icon.className = 'instruction-icon';
-        
-        // تحديد الأيقونة بناءً على نوع المناورة
-        switch(step.maneuver.type) {
-            case 'depart':
-            case 'arrive':
-                icon.innerHTML = '📍';
-                break;
-            case 'turn':
-                icon.innerHTML = '↩️';
-                break;
-            case 'new name':
-                icon.innerHTML = '🛣️';
-                break;
-            default:
-                icon.innerHTML = '➡️';
+
+        function initializeMap(lat, lng){
+            mapContainer.style.display = 'block';
+            
+            // استخدام OpenStreetMap مع طبقات متعددة للمزيد من التفاصيل
+            map = L.map('mapContainer', {
+                zoomControl: true,
+                scrollWheelZoom: true,
+                touchZoom: true,
+                doubleClickZoom: true
+            }).setView([lat, lng], 18);
+            
+            // إضافة طبقات متعددة للخريطة
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+                maxZoom: 19
+            }).addTo(map);
+            
+            // إضافة طبقة تفصيلية إضافية
+            L.tileLayer('https://tiles.wmflabs.org/hikebike/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                opacity: 0.5
+            }).addTo(map);
+            
+            // إنشاء علامة للموقع الحالي
+            marker = L.marker([lat, lng]).addTo(map)
+                .bindPopup('موقعك الحالي')
+                .openPopup();
+            
+            // اكتشاف تفاعل المستخدم لمنع التمرير التلقائي
+            map.on('movestart', () => {
+                userInteracted = true;
+            });
+            
+            map.on('moveend', () => {
+                userInteracted = false;
+            });
         }
-        
-        instructionDiv.appendChild(icon);
-        instructionDiv.appendChild(document.createTextNode(step.maneuver.instruction || 'تابع السير'));
-        
-        routeInstructionsElem.appendChild(instructionDiv);
-    });
-}
 
-// إعداد تعليمات المسار
-function setupRouteInstructions(route) {
-    routeSteps = route.routes[0].legs[0].steps || [];
-    currentStepIndex = 0;
-}
-
-// حساب المسافة بين نقطتين (بالأمتار)
-function calculateDistance(lat1, lon1, lat2, lon2) {
-    const R = 6371e3; // نصف قطر الأرض بالأمتار
-    const φ1 = lat1 * Math.PI / 180;
-    const φ2 = lat2 * Math.PI / 180;
-    const Δφ = (lat2 - lat1) * Math.PI / 180;
-    const Δλ = (lon2 - lon1) * Math.PI / 180;
-
-    const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
-              Math.cos(φ1) * Math.cos(φ2) *
-              Math.sin(Δλ/2) * Math.sin(Δλ/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-
-    return R * c;
-}
-
-// عرض معلومات الموقع
-function displayLocation(position){
-    const coords = position.coords;
-    latitudeElem.textContent = coords.latitude.toFixed(8);
-    longitudeElem.textContent = coords.longitude.toFixed(8);
-    accuracyElem.textContent = coords.accuracy ? coords.accuracy.toFixed(2) : '4.00';
-    speedElem.textContent = coords.speed ? (coords.speed * 3.6).toFixed(2) : '0.00';
-    locationInfo.style.display = 'block';
-}
-
-// استخدام Nominatim API للحصول على اسم المكان
-async function reverseGeocode(lat, lng){
-    try{
-        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&accept-language=ar`);
-        const data = await res.json();
-        return data.display_name || 'غير متاح';
-    }catch(e){
-        return 'غير متاح';
-    }
-}
-
-// تحويل العنوان إلى إحداثيات
-async function geocodeAddress(address) {
-    try {
-        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&accept-language=ar`);
-        const data = await res.json();
-        
-        if (data && data.length > 0) {
-            return {
-                lat: parseFloat(data[0].lat),
-                lng: parseFloat(data[0].lon),
-                displayName: data[0].display_name
-            };
-        } else {
-            throw new Error("لم يتم العثور على العنوان");
+        function updateMapPosition(lat, lng) {
+            if (map && marker) {
+                // تحديث موقع العلامة بشكل سلس دون إعادة تحميل الخريطة
+                marker.setLatLng([lat, lng]);
+                
+                // إذا كان المستخدم لا يقوم بالتكبير/التصغير، نحرك الخريطة لموقع العلامة
+                if (!userInteracted) {
+                    map.panTo([lat, lng], {animate: true, duration: 1});
+                }
+            }
         }
-    } catch (error) {
-        throw new Error("فشل في تحويل العنوان إلى إحداثيات: " + error.message);
-    }
-}
 
-// حساب المسار باستخدام OSRM
-async function calculateRoute(start, end) {
-    try {
-        const res = await fetch(`https://router.project-osrm.org/route/v1/driving/${start.lng},${start.lat};${end.lng},${end.lat}?overview=full&geometries=geojson&steps=true`);
-        const data = await res.json();
-        
-        if (data.code !== 'Ok') {
-            throw new Error("فشل في حساب المسار");
+        function handleLocationError(error){
+            let msg = '';
+            switch(error.code){
+                case error.PERMISSION_DENIED: msg="تم رفض طلب الوصول إلى الموقع"; break;
+                case error.POSITION_UNAVAILABLE: msg="معلومات الموقع غير متاحة"; break;
+                case error.TIMEOUT: msg="انتهت مهلة طلب الموقع"; break;
+                default: msg="حدث خطأ أثناء محاولة تحديد الموقع"; break;
+            }
+            showError(msg);
+            stopTracking();
         }
-        
-        return data;
-    } catch (error) {
-        throw new Error("فشل في حساب المسار: " + error.message);
-    }
-}
 
-// عرض المسار على الخريطة
-function displayRoute(route, start, end) {
-    // إزالة المسار السابق إذا كان موجوداً
-    if (routeLayer) {
-        map.removeLayer(routeLayer);
-    }
-    
-    // حفظ إحداثيات المسار
-    routeCoordinates = route.routes[0].geometry.coordinates.map(coord => [coord[1], coord[0]]);
-    
-    // إضافة المسار الجديد
-    routeLayer = L.geoJSON(route.routes[0].geometry, {
-        style: {
-            color: '#3498db',
-            weight: 5,
-            opacity: 0.7
+        function showError(msg){
+            errorDiv.textContent = msg;
+            errorDiv.style.display = 'block';
         }
-    }).addTo(map);
-    
-    // إضافة علامات البداية والنهاية
-    const startIcon = L.divIcon({
-        className: 'start-marker',
-        html: '<div style="background-color: #2ecc71; width: 16px; height: 16px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 5px rgba(0,0,0,0.5);"></div>',
-        iconSize: [20, 20],
-        iconAnchor: [10, 10]
-    });
-    
-    const endIcon = L.divIcon({
-        className: 'end-marker',
-        html: '<div style="background-color: #e74c3c; width: 16px; height: 16px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 5px rgba(0,0,0,0.5);"></div>',
-        iconSize: [20, 20],
-        iconAnchor: [10, 10]
-    });
-    
-    L.marker([start.lat, start.lng], {icon: startIcon}).addTo(map)
-        .bindPopup(`<b>نقطة البداية:</b><br>${start.displayName}`);
-    
-    L.marker([end.lat, end.lng], {icon: endIcon}).addTo(map)
-        .bindPopup(`<b>نقطة النهاية:</b><br>${end.displayName}`);
-    
-    // ضبط عرض الخريطة ليشمل المسار بالكامل
-    map.fitBounds(routeLayer.getBounds(), {padding: [20, 20]});
-}
-
-// عرض معلومات المسار
-function displayRouteInfo(route) {
-    const routeInfoData = route.routes[0];
-    const distance = (routeInfoData.distance / 1000).toFixed(1); // تحويل إلى كيلومترات
-    const duration = (routeInfoData.duration / 60).toFixed(0); // تحويل إلى دقائق
-    
-    totalDistanceElem.textContent = distance + ' كم';
-    totalTimeElem.textContent = duration + ' دقيقة';
-    remainingDistanceElem.textContent = distance + ' كم';
-    
-    routeInfo.innerHTML = `
-        <p><strong>المسافة الكلية:</strong> ${distance} كم</p>
-        <p><strong>الوقت المتوقع:</strong> ${duration} دقيقة</p>
-        <p><strong>نوع الطريق:</strong> ${routeInfoData.legs[0].summary || "مسار رئيسي"}</p>
-    `;
-}
-
-function handleLocationError(error){
-    let msg = '';
-    switch(error.code){
-        case error.PERMISSION_DENIED: msg="تم رفض طلب الوصول إلى الموقع"; break;
-        case error.POSITION_UNAVAILABLE: msg="معلومات الموقع غير متاحة"; break;
-        case error.TIMEOUT: msg="انتهت مهلة طلب الموقع"; break;
-        default: msg="حدث خطأ أثناء محاولة تحديد الموقع"; break;
-    }
-    showError(msg);
-}
-
-function showError(msg){
-    errorDiv.textContent = msg;
-    errorDiv.style.display='block';
-}
-</script>
+    </script>
 </body>
 </html>
