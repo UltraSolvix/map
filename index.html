@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>موقعي الحالي - خريطة تفاعلية دقيقة</title>
+<title>موقعي الحالي</title>
 
 <!-- مكتبة Leaflet -->
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
@@ -15,48 +15,49 @@
     padding: 0;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-    color: #fff;
     height: 100vh;
     overflow: hidden;
   }
 
-  h1 {
-    position: absolute;
-    top: 15px;
+  /* العنوان العلوي */
+  #placenameBox {
+    position: fixed;
+    top: 0;
     width: 100%;
     text-align: center;
-    z-index: 9999;
-    font-size: 24px;
-    background: rgba(0,0,0,0.4);
-    padding: 10px 0;
-    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.45);
+    color: #fff;
+    font-size: 18px;
+    font-weight: 500;
+    padding: 12px 5px;
+    z-index: 1000;
     backdrop-filter: blur(6px);
+    letter-spacing: 0.5px;
+  }
+
+  #placename span {
+    color: #aee2ff;
+    font-weight: 600;
   }
 
   #map {
     height: 100vh;
     width: 100%;
   }
-
-  /* شكل العلامة (دبوس أزرق مثل Google Maps) */
-  .blue-pin {
-    background-image: url('https://maps.gstatic.com/mapfiles/ms2/micons/blue-dot.png');
-    background-size: contain;
-    width: 30px;
-    height: 50px;
-  }
 </style>
 </head>
 <body>
 
-<h1>📍 موقعي الحالي: <span id="placename">جاري التحديد...</span></h1>
+<div id="placenameBox">
+   موقعي الحالي: <span id="placename">جارٍ التحديد...</span>
+</div>
+
 <div id="map"></div>
 
 <script>
-let map = L.map('map').setView([26.8206, 30.8025], 7); // مبدئيًا مركزها على مصر
+let map = L.map('map').setView([26.8206, 30.8025], 7);
 let marker = null;
 
-// خريطة OpenStreetMap
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   maxZoom: 19,
   attribution: '© OpenStreetMap'
@@ -64,52 +65,67 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
 
 const placenameElem = document.getElementById("placename");
 
-// جلب اسم المكان بدقة
+// أيقونة الدبوس الأزرق مثل خرائط جوجل (SVG)
+const bluePinIcon = L.divIcon({
+  className: "",
+  html: `
+    <svg xmlns="http://www.w3.org/2000/svg" width="34" height="34" viewBox="0 0 24 24">
+      <path fill="#4285F4" d="M12 2C8.1 2 5 5.1 5 9c0 5.2 7 13 7 13s7-7.8 7-13c0-3.9-3.1-7-7-7z"/>
+      <circle cx="12" cy="9" r="3" fill="white"/>
+    </svg>
+  `,
+  iconSize: [30, 30],
+  iconAnchor: [15, 30], // رأس الدبوس من أسفل
+});
+
+// دالة للحصول على اسم الشارع والمدينة
 async function reverseGeocode(lat, lon) {
   try {
-    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=18&addressdetails=1`);
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=18&addressdetails=1`
+    );
     const data = await res.json();
-    return data.display_name || "غير معروف";
-  } catch (e) {
-    return "غير معروف";
+    const addr = data.address;
+
+    let street = addr.road || addr.neighbourhood || addr.suburb || "";
+    let city = addr.city || addr.town || addr.village || addr.county || "";
+
+    if (street && city) return `${street} - ${city}`;
+    else if (city) return city;
+    else if (street) return street;
+    else return "جارٍ التحديد...";
+  } catch {
+    return "جارٍ التحديد...";
   }
 }
 
-// تحديث الموقع في الخريطة كل ثانية
+// تحديث الموقع لحظيًا
 function updatePosition(position) {
   const { latitude, longitude } = position.coords;
-
-  // إنشاء الأيقونة الزرقاء (دبوس)
-  const blueIcon = L.icon({
-    iconUrl: "https://maps.gstatic.com/mapfiles/ms2/micons/blue-dot.png",
-    iconSize: [30, 50],
-    iconAnchor: [15, 50],
-  });
+  map.setView([latitude, longitude], 18, { animate: true });
 
   if (!marker) {
-    marker = L.marker([latitude, longitude], { icon: blueIcon }).addTo(map);
-    map.setView([latitude, longitude], 18);
+    marker = L.marker([latitude, longitude], { icon: bluePinIcon }).addTo(map);
   } else {
     marker.setLatLng([latitude, longitude]);
-    map.panTo([latitude, longitude], { animate: true, duration: 0.5 });
   }
 
-  // تحديث اسم المكان
-  reverseGeocode(latitude, longitude).then(name => {
+  reverseGeocode(latitude, longitude).then((name) => {
     placenameElem.textContent = name;
   });
 }
 
+// في حالة الخطأ
 function handleError(error) {
-  placenameElem.textContent = "تعذر تحديد الموقع (" + error.message + ")";
+  placenameElem.textContent = "تعذر تحديد الموقع بدقة (" + error.message + ")";
 }
 
-// تشغيل التتبع المستمر بدقة عالية جدًا
+// تتبع الموقع بدقة عالية كل ثانية
 if (navigator.geolocation) {
   navigator.geolocation.watchPosition(updatePosition, handleError, {
     enableHighAccuracy: true,
     maximumAge: 0,
-    timeout: 10000
+    timeout: 10000,
   });
 } else {
   placenameElem.textContent = "المتصفح لا يدعم تحديد الموقع الجغرافي.";
