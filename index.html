@@ -52,16 +52,6 @@
         .btn-success {
             background: #2ecc71;
         }
-        .place-name {
-            font-weight: bold;
-            font-size: 1.2rem;
-            color: #2c3e50;
-            margin: 10px 0;
-            padding: 10px;
-            background: #f8f9fa;
-            border-radius: 10px;
-            display: none;
-        }
         .map-container {
             flex-grow: 1;
             width: 100%;
@@ -115,8 +105,6 @@
         <div class="loader" id="loader"></div>
         <div class="error" id="error"></div>
 
-        <div class="place-name" id="placeName"></div>
-
         <div class="map-container" id="mapContainer"></div>
     </div>
 
@@ -124,7 +112,6 @@
     <script>
         const getLocationBtn = document.getElementById('getLocation');
         const stopTrackingBtn = document.getElementById('stopTracking');
-        const placeNameElem = document.getElementById('placeName');
         const loader = document.getElementById('loader');
         const errorDiv = document.getElementById('error');
         const mapContainer = document.getElementById('mapContainer');
@@ -155,21 +142,22 @@
             stopTrackingBtn.style.display = 'inline-block';
             isTracking = true;
 
-            // استخدام watchPosition للتحديث المستمر
+            let bestPosition = null;
+            let bestAccuracy = Infinity;
+
+            // Watch for high-accuracy position
             watchId = navigator.geolocation.watchPosition(
                 async (position) => {
-                    loader.style.display = 'none';
-                    const coords = position.coords;
-                    
-                    // عرض اسم المكان فقط - لا تظهر الإحداثيات
-                    await reverseGeocode(coords.latitude, coords.longitude);
-                    
-                    // عرض الخريطة مع التحديث السلس
-                    if (!map) {
-                        initializeMap(coords.latitude, coords.longitude);
-                    } else {
-                        // تحديث الموقع دون إعادة تحميل الخريطة
-                        updateMapPosition(coords.latitude, coords.longitude);
+                    const acc = position.coords.accuracy;
+                    if (acc <= 4 && acc < bestAccuracy) { // Target 4-meter accuracy
+                        bestAccuracy = acc;
+                        bestPosition = position;
+                        loader.style.display = 'none';
+                        if (!map) {
+                            initializeMap(position.coords.latitude, position.coords.longitude);
+                        } else {
+                            updateMapPosition(position.coords.latitude, position.coords.longitude);
+                        }
                     }
                 },
                 (err) => {
@@ -178,10 +166,18 @@
                 },
                 { 
                     enableHighAccuracy: true, 
-                    maximumAge: 1000,
-                    timeout: 10000 
+                    maximumAge: 1000,  // Cache max 1 second
+                    timeout: 5000 
                 }
             );
+
+            // Stop initial collection after 8 seconds if accuracy not met
+            setTimeout(() => {
+                if (bestAccuracy > 4) {
+                    showError("لم يتم الحصول على موقع بدقة 4 أمتار");
+                    stopTracking();
+                }
+            }, 8000);
         }
 
         function stopTracking() {
@@ -194,82 +190,64 @@
             stopTrackingBtn.style.display = 'none';
         }
 
-        // استخدام Nominatim API للحصول على اسم المكان فقط
-        async function reverseGeocode(lat, lng){
-            try{
-                const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&accept-language=ar`);
-                const data = await res.json();
-                placeNameElem.textContent = data.display_name || 'غير متاح';
-                placeNameElem.style.display = 'block';
-            }catch(e){
-                placeNameElem.textContent = 'غير متاح';
-                placeNameElem.style.display = 'block';
-            }
-        }
-
-        function initializeMap(lat, lng){
+        function initializeMap(lat, lng) {
             mapContainer.style.display = 'block';
             
-            // استخدام OpenStreetMap مع طبقات متعددة للمزيد من التفاصيل
+            // Initialize OpenStreetMap
             map = L.map('mapContainer', {
                 zoomControl: true,
                 scrollWheelZoom: true,
                 touchZoom: true,
-                doubleClickZoom: true
+                doubleClickZoom: true,
+                gestureHandling: true
             }).setView([lat, lng], 18);
             
-            // إضافة طبقات متعددة للخريطة
+            // Add detailed OpenStreetMap tiles
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
                 maxZoom: 19
             }).addTo(map);
             
-            // إضافة طبقة تفصيلية إضافية
+            // Add detailed layer for landmarks
             L.tileLayer('https://tiles.wmflabs.org/hikebike/{z}/{x}/{y}.png', {
                 maxZoom: 19,
                 opacity: 0.5
             }).addTo(map);
             
-            // إنشاء علامة للموقع الحالي
+            // Add marker for current location
             marker = L.marker([lat, lng]).addTo(map)
                 .bindPopup('موقعك الحالي')
                 .openPopup();
-            
-            // اكتشاف تفاعل المستخدم لمنع التمرير التلقائي
-            map.on('movestart', () => {
-                userInteracted = true;
-            });
-            
-            map.on('moveend', () => {
-                userInteracted = false;
-            });
+
+            // Detect user interaction to prevent auto-centering
+            map.on('movestart', () => userInteracted = true);
         }
 
         function updateMapPosition(lat, lng) {
             if (map && marker) {
-                // تحديث موقع العلامة بشكل سلس دون إعادة تحميل الخريطة
+                // Smoothly update marker position
                 marker.setLatLng([lat, lng]);
                 
-                // إذا كان المستخدم لا يقوم بالتكبير/التصغير، نحرك الخريطة لموقع العلامة
+                // Only pan to new position if user hasn't interacted
                 if (!userInteracted) {
-                    map.panTo([lat, lng], {animate: true, duration: 1});
+                    map.panTo([lat, lng], { animate: true, duration: 1 });
                 }
             }
         }
 
-        function handleLocationError(error){
+        function handleLocationError(error) {
             let msg = '';
-            switch(error.code){
-                case error.PERMISSION_DENIED: msg="تم رفض طلب الوصول إلى الموقع"; break;
-                case error.POSITION_UNAVAILABLE: msg="معلومات الموقع غير متاحة"; break;
-                case error.TIMEOUT: msg="انتهت مهلة طلب الموقع"; break;
-                default: msg="حدث خطأ أثناء محاولة تحديد الموقع"; break;
+            switch (error.code) {
+                case error.PERMISSION_DENIED: msg = "تم رفض طلب الوصول إلى الموقع"; break;
+                case error.POSITION_UNAVAILABLE: msg = "معلومات الموقع غير متاحة"; break;
+                case error.TIMEOUT: msg = "انتهت مهلة طلب الموقع"; break;
+                default: msg = "حدث خطأ أثناء محاولة تحديد الموقع"; break;
             }
             showError(msg);
             stopTracking();
         }
 
-        function showError(msg){
+        function showError(msg) {
             errorDiv.textContent = msg;
             errorDiv.style.display = 'block';
         }
