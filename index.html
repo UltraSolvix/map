@@ -19,7 +19,6 @@
     overflow: hidden;
   }
 
-  /* العنوان العلوي */
   #placenameBox {
     position: fixed;
     top: 0;
@@ -29,15 +28,22 @@
     color: #fff;
     font-size: 18px;
     font-weight: 500;
-    padding: 12px 5px;
+    padding: 10px 6px;
     z-index: 1000;
     backdrop-filter: blur(6px);
-    letter-spacing: 0.5px;
+    letter-spacing: 0.3px;
   }
 
-  #placename span {
+  #placename {
     color: #aee2ff;
     font-weight: 600;
+  }
+
+  #accuracy {
+    color: #ffd479;
+    font-size: 14px;
+    display: block;
+    margin-top: 2px;
   }
 
   #map {
@@ -49,7 +55,8 @@
 <body>
 
 <div id="placenameBox">
-   موقعي الحالي: <span id="placename">جارٍ التحديد...</span>
+  📍 الموقع الحالي: <span id="placename">جارٍ التحديد...</span>
+  <span id="accuracy"></span>
 </div>
 
 <div id="map"></div>
@@ -57,15 +64,15 @@
 <script>
 let map = L.map('map').setView([26.8206, 30.8025], 7);
 let marker = null;
+let accuracyElem = document.getElementById("accuracy");
+let placenameElem = document.getElementById("placename");
 
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  maxZoom: 19,
+  maxZoom: 20,
   attribution: '© OpenStreetMap'
 }).addTo(map);
 
-const placenameElem = document.getElementById("placename");
-
-// أيقونة الدبوس الأزرق مثل خرائط جوجل (SVG)
+// أيقونة دبوس جوجل الأزرق (SVG)
 const bluePinIcon = L.divIcon({
   className: "",
   html: `
@@ -75,33 +82,41 @@ const bluePinIcon = L.divIcon({
     </svg>
   `,
   iconSize: [30, 30],
-  iconAnchor: [15, 30], // رأس الدبوس من أسفل
+  iconAnchor: [15, 30],
 });
 
-// دالة للحصول على اسم الشارع والمدينة
+// وظيفة إحضار اسم الشارع + المدينة بدقة
 async function reverseGeocode(lat, lon) {
   try {
     const res = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=18&addressdetails=1`
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=19&addressdetails=1`
     );
     const data = await res.json();
     const addr = data.address;
 
-    let street = addr.road || addr.neighbourhood || addr.suburb || "";
+    let street = addr.road || addr.residential || addr.neighbourhood || "";
     let city = addr.city || addr.town || addr.village || addr.county || "";
 
     if (street && city) return `${street} - ${city}`;
-    else if (city) return city;
     else if (street) return street;
+    else if (city) return city;
     else return "جارٍ التحديد...";
   } catch {
     return "جارٍ التحديد...";
   }
 }
 
-// تحديث الموقع لحظيًا
+// تحديث الموقع الحي
 function updatePosition(position) {
-  const { latitude, longitude } = position.coords;
+  const { latitude, longitude, accuracy } = position.coords;
+
+  // عرض الدقة
+  accuracyElem.textContent = `دقة الموقع: ${accuracy.toFixed(1)} متر`;
+
+  // تحسين الدقة (يتجاهل المواقع الضعيفة فوق 30 متر)
+  if (accuracy > 30) return;
+
+  // تحديث الخريطة والموقع
   map.setView([latitude, longitude], 18, { animate: true });
 
   if (!marker) {
@@ -110,6 +125,7 @@ function updatePosition(position) {
     marker.setLatLng([latitude, longitude]);
   }
 
+  // تحديث اسم الشارع
   reverseGeocode(latitude, longitude).then((name) => {
     placenameElem.textContent = name;
   });
@@ -120,12 +136,12 @@ function handleError(error) {
   placenameElem.textContent = "تعذر تحديد الموقع بدقة (" + error.message + ")";
 }
 
-// تتبع الموقع بدقة عالية كل ثانية
+// تتبع الموقع باستمرار بدقة قصوى
 if (navigator.geolocation) {
   navigator.geolocation.watchPosition(updatePosition, handleError, {
     enableHighAccuracy: true,
     maximumAge: 0,
-    timeout: 10000,
+    timeout: 8000,
   });
 } else {
   placenameElem.textContent = "المتصفح لا يدعم تحديد الموقع الجغرافي.";
