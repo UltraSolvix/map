@@ -3,121 +3,139 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>خريطة GPS احترافية</title>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<title>تحديد الموقع الجغرافي الدقيق مع اسم المكان</title>
 <style>
-html, body { height: 100%; margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; }
-#map { width: 100%; height: 100vh; }
-.info-box {
-  position: absolute; top: 10px; right: 10px;
-  background: rgba(255,255,255,0.95); padding: 15px 20px; border-radius: 12px;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.3); z-index: 1000; max-width: 320px; line-height: 1.5;
-}
+body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin:0; padding:20px; background:linear-gradient(135deg,#667eea 0%,#764ba2 100%); color:#333; min-height:100vh; text-align:center;}
+.container{max-width:800px;margin:0 auto;background:white;border-radius:15px;box-shadow:0 10px 30px rgba(0,0,0,0.2);padding:30px;margin-top:20px;}
+h1{color:#2c3e50;margin-bottom:20px;}
+.btn{background:#3498db;color:white;border:none;padding:12px 25px;font-size:18px;border-radius:50px;cursor:pointer;margin:10px;box-shadow:0 4px 6px rgba(0,0,0,0.1);transition:all 0.3s;}
+.btn:hover{background:#2980b9;transform:translateY(-2px);}
+.btn-success{background:#2ecc71;}
+.location-info{background:#f8f9fa;border-radius:10px;padding:20px;margin:20px 0;text-align:right;display:none;}
+.map-container{height:400px;width:100%;border-radius:10px;overflow:hidden;margin:20px 0;display:none;box-shadow:0 4px 10px rgba(0,0,0,0.1);}
+.coordinates{font-family:monospace;background:#eee;padding:5px 10px;border-radius:5px;direction:ltr;}
+.accuracy{font-weight:bold;color:#e74c3c;}
+.loader{border:5px solid #f3f3f3;border-top:5px solid #3498db;border-radius:50%;width:50px;height:50px;animation:spin 2s linear infinite;margin:20px auto;display:none;}
+@keyframes spin{0%{transform:rotate(0deg);}100%{transform:rotate(360deg);}}
+.error{background:#f8d7da;color:#721c24;padding:15px;border-radius:10px;margin:20px 0;display:none;}
 </style>
 </head>
 <body>
-<div id="map"></div>
-<div class="info-box" id="infoBox">
-  <strong>اسم المكان:</strong> <span id="placeName">جارٍ التحديد...</span><br>
-  <strong>الدقة:</strong> <span id="accuracy">-</span> متر<br>
-  <strong>خط العرض:</strong> <span id="lat">-</span><br>
-  <strong>خط الطول:</strong> <span id="lng">-</span>
+<div class="container">
+<h1>تحديد الموقع الجغرافي الدقيق مع اسم المكان</h1>
+
+<button id="getLocation" class="btn btn-success">تحديد موقعي بدقة عالية</button>
+
+<div class="loader" id="loader"></div>
+<div class="error" id="error"></div>
+
+<div class="location-info" id="locationInfo">
+    <h2>تفاصيل موقعك</h2>
+    <p><strong>اسم المكان:</strong> <span id="placeName"></span></p>
+    <p><strong>خط العرض:</strong> <span id="latitude" class="coordinates"></span></p>
+    <p><strong>خط الطول:</strong> <span id="longitude" class="coordinates"></span></p>
+    <p><strong>الدقة:</strong> <span id="accuracy" class="accuracy"></span> متر</p>
+    <p><strong>الارتفاع:</strong> <span id="altitude"></span></p>
 </div>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<div class="map-container" id="mapContainer"></div>
+</div>
+
 <script>
-// ======== إعداد الخريطة ========
-const map = L.map('map', { zoomControl: true, dragging: true }).setView([0, 0], 17);
-L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 20,
-    attribution: '&copy; OpenStreetMap contributors'
-}).addTo(map);
+const getLocationBtn = document.getElementById('getLocation');
+const locationInfo = document.getElementById('locationInfo');
+const latitudeElem = document.getElementById('latitude');
+const longitudeElem = document.getElementById('longitude');
+const accuracyElem = document.getElementById('accuracy');
+const altitudeElem = document.getElementById('altitude');
+const placeNameElem = document.getElementById('placeName');
+const loader = document.getElementById('loader');
+const errorDiv = document.getElementById('error');
+const mapContainer = document.getElementById('mapContainer');
 
-// ======== أيقونة السهم ========
-const arrowIcon = L.divIcon({
-    className: '',
-    html: `<div style="transform: rotate(0deg);">
-             <svg width="40" height="40" viewBox="0 0 64 64">
-               <circle cx="32" cy="32" r="12" fill="blue" fill-opacity="0.3"/>
-               <line x1="32" y1="32" x2="32" y2="8" stroke="red" stroke-width="4"/>
-               <polygon points="32,4 28,12 36,12" fill="red"/>
-             </svg>
-           </div>`,
-    iconSize: [40, 40],
-    iconAnchor: [20, 20]
+getLocationBtn.addEventListener('click', () => {
+    if (!navigator.geolocation) {
+        showError("متصفحك لا يدعم خدمة تحديد الموقع الجغرافي");
+        return;
+    }
+
+    loader.style.display = 'block';
+    errorDiv.style.display = 'none';
+
+    let bestPosition = null;
+    let bestAccuracy = Infinity;
+
+    const watchId = navigator.geolocation.watchPosition(
+        (pos) => {
+            const acc = pos.coords.accuracy;
+            if(acc < bestAccuracy){
+                bestAccuracy = acc;
+                bestPosition = pos;
+            }
+        },
+        (err) => {
+            loader.style.display='none';
+            handleLocationError(err);
+        },
+        { enableHighAccuracy:true, maximumAge:0, timeout:20000 }
+    );
+
+    // بعد 8 ثواني نأخذ أفضل إشارة
+    setTimeout(async () => {
+        navigator.geolocation.clearWatch(watchId);
+        loader.style.display='none';
+        if(!bestPosition){
+            showError("لم يتم الحصول على موقع دقيق");
+            return;
+        }
+
+        displayLocation(bestPosition);
+        await reverseGeocode(bestPosition.coords.latitude, bestPosition.coords.longitude);
+        showMap(bestPosition.coords.latitude, bestPosition.coords.longitude);
+    }, 8000);
 });
 
-let userMarker = L.marker([0,0], {icon: arrowIcon}).addTo(map);
-let accuracyCircle = L.circle([0,0], {radius: 0, color:'blue', fillColor:'blue', fillOpacity:0.1}).addTo(map);
-let laserLine = L.polyline([[0,0],[0,0]], {color:'red', weight:2, opacity:0.5}).addTo(map);
-
-let followUser = true;
-
-// ======== عناصر واجهة المستخدم ========
-const latElem = document.getElementById('lat');
-const lngElem = document.getElementById('lng');
-const accElem = document.getElementById('accuracy');
-const placeElem = document.getElementById('placeName');
-
-// ======== تتبع الموقع ========
-let positions = [];
-const maxSamples = 5;
-
-if (!navigator.geolocation) { alert("متصفحك لا يدعم تحديد الموقع."); }
-
-navigator.geolocation.watchPosition(handlePosition, handleError, {
-    enableHighAccuracy: true,
-    maximumAge: 0,
-    timeout: 20000
-});
-
-// ======== التحكم في تتبع المستخدم ========
-map.on('dragstart', () => { followUser = false; });
-
-// ======== دوال ========
-function handlePosition(position) {
-    const { latitude, longitude, accuracy, heading } = position.coords;
-
-    // جمع القراءات لتحسين الدقة
-    positions.push({lat: latitude, lng: longitude, acc: accuracy});
-    if (positions.length > maxSamples) positions.shift();
-
-    const avgLat = positions.reduce((sum, p) => sum + p.lat, 0)/positions.length;
-    const avgLng = positions.reduce((sum, p) => sum + p.lng, 0)/positions.length;
-    const avgAcc = positions.reduce((sum, p) => sum + p.acc, 0)/positions.length;
-
-    // تحديث عناصر info
-    latElem.textContent = avgLat.toFixed(7);
-    lngElem.textContent = avgLng.toFixed(7);
-    accElem.textContent = avgAcc.toFixed(2);
-
-    // تحديث موقع السهم
-    userMarker.setLatLng([avgLat, avgLng]);
-    accuracyCircle.setLatLng([avgLat, avgLng]).setRadius(avgAcc);
-    const rotation = heading !== null ? heading : 0;
-    if(userMarker.getElement()) userMarker.getElement().style.transform = `rotate(${rotation}deg)`;
-
-    // خط الليزر للأمام
-    const laserLength = 0.0005; // تقريبياً 50 متر
-    const rad = rotation * Math.PI / 180;
-    const endLat = avgLat + laserLength * Math.cos(rad);
-    const endLng = avgLng + laserLength * Math.sin(rad);
-    laserLine.setLatLngs([[avgLat, avgLng],[endLat, endLng]]);
-
-    // متابعة المستخدم إذا لم يحرك الخريطة
-    if (followUser) { map.setView([avgLat, avgLng]); }
-
-    // اسم المكان
-    fetch(`https://nominatim.openstreetmap.org/reverse?lat=${avgLat}&lon=${avgLng}&format=json`)
-    .then(res => res.json())
-    .then(data => { placeElem.textContent = data.display_name || "غير متاح"; })
-    .catch(err => placeElem.textContent = "خطأ في جلب الاسم");
+function displayLocation(position){
+    const coords = position.coords;
+    latitudeElem.textContent = coords.latitude.toFixed(8);
+    longitudeElem.textContent = coords.longitude.toFixed(8);
+    accuracyElem.textContent = coords.accuracy.toFixed(2);
+    altitudeElem.textContent = coords.altitude ? coords.altitude.toFixed(2) + ' متر' : 'غير متاح';
+    locationInfo.style.display = 'block';
 }
 
-function handleError(err){
-    console.error(err);
-    alert("تعذر تحديد الموقع: " + err.message);
+// استخدام Nominatim API للحصول على اسم المكان
+async function reverseGeocode(lat, lng){
+    try{
+        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18`);
+        const data = await res.json();
+        placeNameElem.textContent = data.display_name || 'غير متاح';
+    }catch(e){
+        placeNameElem.textContent = 'غير متاح';
+    }
+}
+
+function showMap(lat,lng){
+    mapContainer.style.display='block';
+    mapContainer.innerHTML = `<iframe width="100%" height="100%" frameborder="0" scrolling="no" marginheight="0" marginwidth="0" src="https://maps.google.com/maps?q=${lat},${lng}&z=18&output=embed" style="border:0;"></iframe>`;
+}
+
+function handleLocationError(error){
+    let msg = '';
+    switch(error.code){
+        case error.PERMISSION_DENIED: msg="تم رفض طلب الوصول إلى الموقع"; break;
+        case error.POSITION_UNAVAILABLE: msg="معلومات الموقع غير متاحة"; break;
+        case error.TIMEOUT: msg="انتهت مهلة طلب الموقع"; break;
+        default: msg="حدث خطأ أثناء محاولة تحديد الموقع"; break;
+    }
+    showError(msg);
+}
+
+function showError(msg){
+    errorDiv.textContent = msg;
+    errorDiv.style.display='block';
 }
 </script>
 </body>
 </html>
+
