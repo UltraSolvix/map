@@ -1,94 +1,155 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>خريطة الموقع الدقيق مع اسم الشارع</title>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<style>
-  html, body { height: 100%; margin: 0; padding: 0; }
-  #map { height: 100%; }
-  #location {
-    position: absolute;
-    top: 10px;
-    right: 10px;
-    background: rgba(255,255,255,0.9);
-    padding: 8px 14px;
-    border-radius: 10px;
-    box-shadow: 0 0 10px rgba(0,0,0,0.2);
-    font-family: "Cairo", sans-serif;
-    font-size: 16px;
-    direction: rtl;
-    z-index: 9999;
-  }
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>خريطة الموقع الدقيق مع اسم الشارع</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    html, body { height: 100%; margin: 0; padding: 0; }
+    #map { height: 100%; }
+    #location {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: rgba(255, 255, 255, 0.7);
+      padding: 8px 14px;
+      border-radius: 8px;
+      box-shadow: 0 0 8px rgba(0, 0, 0, 0.2);
+      font-family: "Cairo", sans-serif;
+      font-size: 14px;
+      color: black;
+      direction: rtl;
+      z-index: 9999;
+    }
+    #recenter-btn {
+      position: absolute;
+      bottom: 20px;
+      right: 20px;
+      width: 40px;
+      height: 40px;
+      background: rgba(255, 255, 255, 0.9);
+      border-radius: 50%;
+      box-shadow: 0 0 8px rgba(0, 0, 0, 0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      z-index: 9999;
+    }
+    #recenter-btn:hover {
+      background: rgba(255, 255, 255, 1);
+    }
+    #recenter-btn::before {
+      content: '🎯';
+      font-size: 20px;
+    }
+  </style>
 </head>
 <body>
+  <div id="location">📍 الموقع الحالي: <span id="address">جاري تحديد الموقع...</span></div>
+  <div id="map"></div>
+  <div id="recenter-btn" title="العودة إلى موقعي"></div>
 
-<div id="location">📍 الموقع الحالي: <span id="address">جاري تحديد الموقع...</span></div>
-<div id="map"></div>
+  <script>
+    const map = L.map('map').setView([30.0444, 31.2357], 14);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; خريطة من OpenStreetMap'
+    }).addTo(map);
 
-<script>
-  const map = L.map('map').setView([30.0444, 31.2357], 14);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '&copy; خريطة من OpenStreetMap'
-  }).addTo(map);
+    let marker;
+    let lastUpdate = 0;
+    let lastLat, lastLon;
 
-  let marker;
+    async function getAccurateLocationName(lat, lon) {
+      try {
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=20&addressdetails=1&accept-language=ar`,
+          { headers: { 'User-Agent': 'MyMapApp/1.0 (contact@example.com)' } }
+        );
+        const data = await res.json();
+        const addr = data.address || {};
 
-  async function getAccurateLocationName(lat, lon) {
-    try {
-      const res = await fetch(
-        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=20&addressdetails=1&accept-language=ar`,
-        { headers: { 'User-Agent': 'MyMapApp/1.0 (contact@example.com)' } }
-      );
-      const data = await res.json();
-      const addr = data.address || {};
+        const street = addr.road || addr.pedestrian || addr.highway || "";
+        const area = addr.neighbourhood || addr.suburb || addr.village || "";
+        const city = addr.town || addr.city || addr.county || "";
+        let name = street && city ? `${street}، ${city}` :
+                   street && area ? `${street}، ${area}` :
+                   area && city ? `${area}، ${city}` :
+                   data.display_name || "موقع غير معروف";
 
-      const street = addr.road || addr.pedestrian || addr.highway || "";
-      const area = addr.neighbourhood || addr.suburb || addr.village || "";
-      const city = addr.town || addr.city || addr.county || "";
-      let name = street && city ? `${street}، ${city}` :
-                 street && area ? `${street}، ${area}` :
-                 area && city ? `${area}، ${city}` :
-                 data.display_name || "موقع غير معروف";
-
-      if (name.length > 60) name = name.split("،").slice(0, 3).join("، ");
-      return name;
-    } catch (err) {
-      console.error("خطأ أثناء جلب العنوان:", err);
-      return "جارٍ تحديد الموقع...";
-    }
-  }
-
-  function updatePosition(lat, lon) {
-    if (marker) map.removeLayer(marker);
-    marker = L.marker([lat, lon]).addTo(map);
-  }
-
-  // ✅ متابعة الموقع بدقة
-  navigator.geolocation.watchPosition(
-    async pos => {
-      const { latitude, longitude } = pos.coords;
-      updatePosition(latitude, longitude);
-
-      // فقط أول مرة نركز الخريطة على موقع المستخدم
-      if (!map._userLocated) {
-        map.setView([latitude, longitude], 16);
-        map._userLocated = true;
+        if (name.length > 60) name = name.split("،").slice(0, 3).join("، ");
+        return name;
+      } catch (err) {
+        console.error("خطأ أثناء جلب العنوان:", err);
+        return "جارٍ تحديد الموقع...";
       }
+    }
 
-      const name = await getAccurateLocationName(latitude, longitude);
-      document.getElementById("address").textContent = name;
-    },
-    err => {
-      console.error(err);
-      document.getElementById("address").textContent = "تعذر تحديد الموقع";
-    },
-    { enableHighAccuracy: true, maximumAge: 0 }
-  );
-</script>
+    function smoothMoveMarker(lat, lon, duration = 1000) {
+      if (!marker) {
+        marker = L.marker([lat, lon]).addTo(map);
+      } else {
+        const startLat = lastLat || lat;
+        const startLon = lastLon || lon;
+        const steps = 10;
+        const deltaLat = (lat - startLat) / steps;
+        const deltaLon = (lon - startLon) / steps;
+        let step = 0;
 
+        function animate() {
+          if (step <= steps) {
+            marker.setLatLng([startLat + deltaLat * step, startLon + deltaLon * step]);
+            step++;
+            setTimeout(animate, duration / steps);
+          } else {
+            marker.setLatLng([lat, lon]);
+          }
+        }
+        animate();
+      }
+      lastLat = lat;
+      lastLon = lon;
+    }
+
+    function updatePosition(lat, lon) {
+      const now = Date.now();
+      if (now - lastUpdate >= 1000) {
+        smoothMoveMarker(lat, lon);
+        lastUpdate = now;
+      }
+    }
+
+    navigator.geolocation.watchPosition(
+      async pos => {
+        const { latitude, longitude, accuracy } = pos.coords;
+        if (accuracy <= 3) { // Strict 3-meter accuracy
+          updatePosition(latitude, longitude);
+          if (!map._userLocated) {
+            map.setView([latitude, longitude], 18);
+            map._userLocated = true;
+          }
+          const name = await getAccurateLocationName(latitude, longitude);
+          document.getElementById("address").textContent = name;
+        }
+      },
+      err => {
+        console.error(err);
+        document.getElementById("address").textContent = "تعذر تحديد الموقع";
+      },
+      {
+        enableHighAccuracy: true,
+        maximumAge: 0,
+        timeout: 5000
+      }
+    );
+
+    document.getElementById("recenter-btn").addEventListener("click", () => {
+      if (lastLat && lastLon) {
+        map.setView([lastLat, lastLon], 18);
+      }
+    });
+  </script>
 </body>
 </html>
