@@ -1,155 +1,260 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>خريطة الموقع الدقيق مع اسم الشارع</title>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <style>
-    html, body { height: 100%; margin: 0; padding: 0; }
-    #map { height: 100%; }
-    #location {
-      position: absolute;
-      top: 10px;
-      right: 10px;
-      background: rgba(255, 255, 255, 0.7);
-      padding: 8px 14px;
-      border-radius: 8px;
-      box-shadow: 0 0 8px rgba(0, 0, 0, 0.2);
-      font-family: "Cairo", sans-serif;
-      font-size: 14px;
-      color: black;
-      direction: rtl;
-      z-index: 9999;
-    }
-    #recenter-btn {
-      position: absolute;
-      bottom: 20px;
-      right: 20px;
-      width: 40px;
-      height: 40px;
-      background: rgba(255, 255, 255, 0.9);
-      border-radius: 50%;
-      box-shadow: 0 0 8px rgba(0, 0, 0, 0.3);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      z-index: 9999;
-    }
-    #recenter-btn:hover {
-      background: rgba(255, 255, 255, 1);
-    }
-    #recenter-btn::before {
-      content: '🎯';
-      font-size: 20px;
-    }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>خريطة الموقع الدقيق مع اسم الشارع - إصدار مُحسّن</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  html, body { height: 100%; margin: 0; padding: 0; }
+  #map { height: 100%; }
+
+  /* شريط اسم الموقع الشفاف */
+  #location {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    background: rgba(255,255,255,0.45); /* شفافية */
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-family: "Cairo", sans-serif;
+    font-size: 16px;
+    color: #000; /* نص أسود */
+    z-index: 9999;
+    backdrop-filter: blur(4px);
+    max-width: 60%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* زر العودة للموقع (دائرة صغيرة وجميلة) */
+  #recenter {
+    position: absolute;
+    bottom: 18px;
+    right: 12px;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.95);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 6px 14px rgba(0,0,0,0.18);
+    cursor: pointer;
+    z-index: 9999;
+    font-size: 18px;
+  }
+  #recenter:active { transform: scale(0.98); }
+
+  /* مؤشر سريع للاتصال/الحالة */
+  #status {
+    position: absolute;
+    bottom: 12px;
+    left: 12px;
+    background: rgba(255,255,255,0.75);
+    padding: 6px 10px;
+    border-radius: 8px;
+    font-family: "Cairo", sans-serif;
+    font-size: 13px;
+    z-index: 9999;
+  }
+
+</style>
 </head>
 <body>
-  <div id="location">📍 الموقع الحالي: <span id="address">جاري تحديد الموقع...</span></div>
-  <div id="map"></div>
-  <div id="recenter-btn" title="العودة إلى موقعي"></div>
 
-  <script>
-    const map = L.map('map').setView([30.0444, 31.2357], 14);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; خريطة من OpenStreetMap'
-    }).addTo(map);
+<div id="location">جاري تحديد اسم الموقع...</div>
+<div id="map"></div>
+<div id="recenter" title="العودة للموقع">◎</div>
+<div id="status">وضع: انتظار الموقع — دقة مستهدفة ≤ 3 م</div>
 
-    let marker;
-    let lastUpdate = 0;
-    let lastLat, lastLon;
+<script>
+  // خريطة مبدئية (مركز القاهرة)
+  const map = L.map('map', { zoomControl: true }).setView([30.0444, 31.2357], 15);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap'
+  }).addTo(map);
 
-    async function getAccurateLocationName(lat, lon) {
-      try {
-        const res = await fetch(
-          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=20&addressdetails=1&accept-language=ar`,
-          { headers: { 'User-Agent': 'MyMapApp/1.0 (contact@example.com)' } }
-        );
+  // مؤشر ومتحولات تتبع
+  let marker = null;
+  let markerIcon = L.circleMarker([0,0], {radius:8}).setStyle({color:'#0078ff', weight:2});
+  let lastPos = null;        // {lat, lon, time}
+  let nextPos = null;        // incoming position
+  let animStart = null;      // وقت بداية التحريك
+  let animDur = 1000;       // مدة كل انترفال (ملائم لتحديث كل 1 ثانية)
+  let userHasPanned = false; // لو المستخدم بيفتح الخريطة
+  let autoCenter = true;     // هل نتابع المركز تلقائياً؟
+
+  // عنصر واجهة
+  const locLabel = document.getElementById('location');
+  const recenterBtn = document.getElementById('recenter');
+  const statusEl = document.getElementById('status');
+
+  // إعدادات الموقع
+  const POLL_INTERVAL_MS = 1000;   // تحديث كل 1 ثانية كما طلبت
+  const TARGET_ACCURACY_M = 3;     // دقة مستهدفة 3 متر
+  const REVERSE_GEOCODE_MIN_MOVE = 3; // لا نعمل reverse geocode إلا لو تحركنا > 3m
+
+  // دالة حساب المسافة التقريبية بين نقطتين بالأمتار (Haversine)
+  function haversineMeters(a, b){
+    const R = 6371000;
+    const toRad = v => v * Math.PI/180;
+    const dLat = toRad(b.lat-a.lat);
+    const dLon = toRad(b.lon-a.lon);
+    const lat1 = toRad(a.lat);
+    const lat2 = toRad(b.lat);
+    const sinDlat = Math.sin(dLat/2), sinDlon = Math.sin(dLon/2);
+    const A = sinDlat*sinDlat + sinDlon*sinDlon * Math.cos(lat1)*Math.cos(lat2);
+    const C = 2 * Math.atan2(Math.sqrt(A), Math.sqrt(1-A));
+    return R * C;
+  }
+
+  // دالة للـ reverse geocoding باستخدام Nominatim (OpenStreetMap)
+  // ملاحظة: لتجنب تجاوز حدود الخدمة، سنطلب فقط عندما نتحرك أكثر من REVERSE_GEOCODE_MIN_MOVE
+  async function reverseGeocodeIfNeeded(lat, lon){
+    try{
+      if (!reverseGeocodeIfNeeded.last || haversineMeters(reverseGeocodeIfNeeded.last, {lat,lon}) > REVERSE_GEOCODE_MIN_MOVE){
+        reverseGeocodeIfNeeded.last = {lat,lon};
+        locLabel.textContent = 'جاري جلب اسم الشارع...';
+        const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=20&addressdetails=1&accept-language=ar`;
+        const res = await fetch(url, { headers: { 'User-Agent': 'MyMapApp/1.0 (contact@example.com)' } });
+        if (!res.ok) throw new Error('خطأ في خدمة العنوان');
         const data = await res.json();
         const addr = data.address || {};
+        const street = addr.road || addr.pedestrian || addr.footway || addr.cycleway || addr.highway || '';
+        const building = addr.house_number ? (' ' + addr.house_number) : '';
+        const area = addr.suburb || addr.neighbourhood || addr.village || '';
+        const city = addr.city || addr.town || addr.county || addr.state || '';
+        let name = '';
+        if (street) name = street + building;
+        if (!name && area) name = area;
+        if (!name && city) name = city;
+        if (!name) name = data.display_name || 'موقع غير معروف';
 
-        const street = addr.road || addr.pedestrian || addr.highway || "";
-        const area = addr.neighbourhood || addr.suburb || addr.village || "";
-        const city = addr.town || addr.city || addr.county || "";
-        let name = street && city ? `${street}، ${city}` :
-                   street && area ? `${street}، ${area}` :
-                   area && city ? `${area}، ${city}` :
-                   data.display_name || "موقع غير معروف";
-
-        if (name.length > 60) name = name.split("،").slice(0, 3).join("، ");
-        return name;
-      } catch (err) {
-        console.error("خطأ أثناء جلب العنوان:", err);
-        return "جارٍ تحديد الموقع...";
+        // ضع الاسم مُقتَصراً اذا طويل جداً
+        if (name.length > 80) name = name.slice(0,80) + '...';
+        locLabel.textContent = name;
       }
+    }catch(e){
+      console.error('reverse geocode failed', e);
+      // نترك النص كما هو أو نعرض فشل بسيط
+      // locLabel.textContent = 'خطأ في جلب اسم الموقع';
+    }
+  }
+
+  // تحديث الموضع — نقوم بتسلسل حركي ناعم بين lastPos و nextPos
+  function animate(){
+    requestAnimationFrame(animate);
+    if (!lastPos || !nextPos) return;
+    const now = performance.now();
+    const t = Math.min(1, (now - animStart) / animDur);
+    const lat = lastPos.lat + (nextPos.lat - lastPos.lat) * t;
+    const lon = lastPos.lon + (nextPos.lon - lastPos.lon) * t;
+
+    // تحديث marker
+    if (!marker){
+      marker = L.marker([lat, lon]).addTo(map);
+    } else {
+      marker.setLatLng([lat, lon]);
     }
 
-    function smoothMoveMarker(lat, lon, duration = 1000) {
-      if (!marker) {
-        marker = L.marker([lat, lon]).addTo(map);
-      } else {
-        const startLat = lastLat || lat;
-        const startLon = lastLon || lon;
-        const steps = 10;
-        const deltaLat = (lat - startLat) / steps;
-        const deltaLon = (lon - startLon) / steps;
-        let step = 0;
-
-        function animate() {
-          if (step <= steps) {
-            marker.setLatLng([startLat + deltaLat * step, startLon + deltaLon * step]);
-            step++;
-            setTimeout(animate, duration / steps);
-          } else {
-            marker.setLatLng([lat, lon]);
-          }
-        }
-        animate();
-      }
-      lastLat = lat;
-      lastLon = lon;
+    // إذا المستخدم لم يزلّ الخريطة (لم يقم بالتحريك) أو وضعنا autoCenter true
+    if (autoCenter) {
+      map.setView([lat, lon], map.getZoom(), { animate: true, pan: { duration: 0.9 } });
     }
 
-    function updatePosition(lat, lon) {
-      const now = Date.now();
-      if (now - lastUpdate >= 1000) {
-        smoothMoveMarker(lat, lon);
-        lastUpdate = now;
-      }
+    // عندما تكتمل الحركة، نقّدم lastPos
+    if (t >= 1){
+      lastPos = { ...nextPos, time: Date.now() };
+      nextPos = null;
+    }
+  }
+  animate();
+
+  // عند الضغط على زر العودة، نعيد تفعيل التتبع ومركز الخريطة
+  recenterBtn.addEventListener('click', ()=>{
+    autoCenter = true;
+    userHasPanned = false;
+    if (lastPos) map.setView([lastPos.lat, lastPos.lon], 17, { animate:true });
+  });
+
+  // كشف حدث تحريك الخريطة من قبل المستخدم
+  map.on('movestart', ()=>{ userHasPanned = true; autoCenter = false; });
+
+  // دالة لتلقي بيانات GPS وتعيينها كـ nextPos (تعمل كل ثانية)
+  function handleNewGPS(lat, lon, accuracy){
+    statusEl.textContent = `دقة: ${Math.round(accuracy)} م — مستهدفة ≤ ${TARGET_ACCURACY_M} م`;
+
+    const incoming = { lat: lat, lon: lon };
+    if (!lastPos){
+      // لأول مرة
+      lastPos = { ...incoming, time: Date.now() };
+      nextPos = { ...incoming };
+      animStart = performance.now();
+      // نوقف تحريك الخريطة فقط لو autoCenter true
+      if (autoCenter) map.setView([lat, lon], 17);
+      reverseGeocodeIfNeeded(lat, lon);
+      return;
     }
 
-    navigator.geolocation.watchPosition(
-      async pos => {
+    // لو المسافة صغيرة جداً، لا نغير reverse geocode
+    const dist = haversineMeters(lastPos, incoming);
+
+    // ضبط مدة التحريك بناءً على الفرق الزمني؛ لكن نبقيها ≈ 1000ms لتوافق الطلب
+    animStart = performance.now();
+    animDur = POLL_INTERVAL_MS;
+
+    // نضع nextPos لتتحرك السلسة
+    nextPos = { ...incoming };
+
+    // نطلب اسم المكان لو تحركنا أكثر من حد
+    if (dist > REVERSE_GEOCODE_MIN_MOVE) reverseGeocodeIfNeeded(lat, lon);
+  }
+
+  // محاولة استخدام watchPosition (أسرع وأدق عند توفره)، لكن سنستخدم poll أيضاً كل 1 ثانية
+  let watchId = null;
+  function startTracking(){
+    if (!('geolocation' in navigator)){
+      statusEl.textContent = 'المتصفح لا يدعم تحديد الموقع';
+      return;
+    }
+
+    // أفضل إعداد لطلب دقة عالية — لكن الدقة الحقيقية تعتمد على جهاز المستخدم وإشارة GPS
+    try{
+      watchId = navigator.geolocation.watchPosition(pos => {
         const { latitude, longitude, accuracy } = pos.coords;
-        if (accuracy <= 3) { // Strict 3-meter accuracy
-          updatePosition(latitude, longitude);
-          if (!map._userLocated) {
-            map.setView([latitude, longitude], 18);
-            map._userLocated = true;
-          }
-          const name = await getAccurateLocationName(latitude, longitude);
-          document.getElementById("address").textContent = name;
-        }
-      },
-      err => {
-        console.error(err);
-        document.getElementById("address").textContent = "تعذر تحديد الموقع";
-      },
-      {
-        enableHighAccuracy: true,
-        maximumAge: 0,
-        timeout: 5000
-      }
-    );
+        // نعطي أولوية لتحديثات watchPosition
+        handleNewGPS(latitude, longitude, accuracy);
+      }, err => {
+        console.error('watchPosition error', err);
+        statusEl.textContent = 'تعذر الحصول على موقع (تأكد من السماح)';
+      }, { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 });
+    }catch(e){
+      console.error(e);
+    }
 
-    document.getElementById("recenter-btn").addEventListener("click", () => {
-      if (lastLat && lastLon) {
-        map.setView([lastLat, lastLon], 18);
-      }
-    });
-  </script>
+    // poll احتياطي كل 1 ثانية لضمان التحديث إذا لم ترسل watchPosition بسرعة كافية
+    setInterval(()=>{
+      navigator.geolocation.getCurrentPosition(pos => {
+        const { latitude, longitude, accuracy } = pos.coords;
+        handleNewGPS(latitude, longitude, accuracy);
+      }, err => {
+        // تجاهل أخطاء مؤقتة
+      }, { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 });
+    }, POLL_INTERVAL_MS);
+  }
+
+  // ابدأ التتبع فوراً
+  startTracking();
+
+  // ملاحظات مهمة للمستخدم (غير قابلة للتحكم برمجياً):
+  // 1) لا يمكن لأي كود أن يضمن دقة 3 أمتار دائماً — الدقة تعتمد على الجهاز، إشارة GPS، وعدد الأقمار الصناعية.
+  // 2) reverse-geocoding كل ثانية قد يتسبب في تجاوز حدود خدمة Nominatim. لذلك طلبنا الاسم فقط عند تحركك > 3m.
+  // 3) لتجربة أفضل: افتح الصفحة عبر HTTPS، وافتحها على جهاز (هاتف) مع استقبال GPS جيد، واسمح للصّفحة باستخدام الموقع.
+
+</script>
+
 </body>
 </html>
