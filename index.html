@@ -1,277 +1,120 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>موقعي الحقيقي — تتبع مباشر</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>موقعي الحالي - خريطة تفاعلية دقيقة</title>
 
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<!-- مكتبة Leaflet -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <style>
-  :root{
-    --overlay-bg: rgba(10,20,30,0.6);
-    --accent: #67d0b6;
-  }
-  html,body{height:100%;margin:0;}
-  #map{height:100vh;width:100vw;}
-  /* رسالة كبيرة هادئة في المنتصف */
-  .big-label{
-    position: absolute;
-    left:50%;
-    top:10%;
-    transform:translateX(-50%);
-    z-index: 9999;
-    background: var(--overlay-bg);
+  body {
+    margin: 0;
+    padding: 0;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
     color: #fff;
-    padding: 18px 30px;
-    border-radius: 14px;
-    font-family: "Segoe UI", Tahoma, Arial, sans-serif;
-    font-size: 34px;
-    font-weight: 700;
-    letter-spacing: 0.6px;
-    box-shadow: 0 8px 30px rgba(0,0,0,0.35);
-    text-align:center;
+    height: 100vh;
+    overflow: hidden;
   }
-  /* مصغر لعرض الدقة (غير ظاهر كثيراً حسب طلبك، لكن نحتاجه للمطابقة) */
-  .small-info{
+
+  h1 {
     position: absolute;
-    left: 12px;
-    bottom: 12px;
+    top: 15px;
+    width: 100%;
+    text-align: center;
     z-index: 9999;
-    background: rgba(255,255,255,0.95);
-    color: #111;
-    padding: 8px 12px;
-    border-radius:10px;
-    font-family: monospace;
-    font-size: 13px;
-    box-shadow: 0 6px 18px rgba(0,0,0,0.15);
-    opacity: 0.9;
+    font-size: 24px;
+    background: rgba(0,0,0,0.4);
+    padding: 10px 0;
+    border-radius: 8px;
+    backdrop-filter: blur(6px);
   }
-  /* تحسين المظهر على الشاشات الصغيرة */
-  @media (max-width:480px){
-    .big-label{font-size:22px; padding: 12px 18px; top:7%;}
+
+  #map {
+    height: 100vh;
+    width: 100%;
   }
-  /* دائرة دقة داخل الخريطة (css only for pointer-events) */
-  .accuracy-circle{
-    pointer-events: none;
+
+  /* شكل العلامة (دبوس أزرق مثل Google Maps) */
+  .blue-pin {
+    background-image: url('https://maps.gstatic.com/mapfiles/ms2/micons/blue-dot.png');
+    background-size: contain;
+    width: 30px;
+    height: 50px;
   }
 </style>
 </head>
 <body>
-  <div id="map"></div>
 
-  <div class="big-label">موقعي الحقيقي</div>
+<h1>📍 موقعي الحالي: <span id="placename">جاري التحديد...</span></h1>
+<div id="map"></div>
 
-  <div class="small-info" id="statusBox" aria-live="polite" style="display:none;">
-    موقع: جارٍ الحصول عليه... • دقة: -- م • سرعة: -- م/ث
-  </div>
-
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-/*
-  ملاحظات:
-  - هذا السكربت يحاول تحديث الموقع كل ثانية. المتصفح/الهاتف قد يقلل التحديثات تلقائياً.
-  - لتقليل الاهتزاز، استعملت تنعيم بسيط وخط لمسار.
-  - لا يمكن ضمان دقة 1-2 متر من المتصفح وحده؛ لتحسين ذلك استخدم جهاز GPS خارجي أو منصة مخصصة.
-*/
+let map = L.map('map').setView([26.8206, 30.8025], 7); // مبدئيًا مركزها على مصر
+let marker = null;
 
-const map = L.map('map', {zoomControl:false}).setView([30.0444,31.2357], 16); // مركز مصر مبدئياً
+// خريطة OpenStreetMap
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   maxZoom: 19,
   attribution: '© OpenStreetMap'
 }).addTo(map);
 
-// عناصر العرض
-const statusBox = document.getElementById('statusBox');
-statusBox.style.display = 'block';
+const placenameElem = document.getElementById("placename");
 
-// Marker & accuracy circle & polyline (path)
-let marker = null;
-let accuracyCircle = null;
-let pathCoords = [];
-let pathLine = L.polyline([], {color: '#0ea5a0', weight: 4, opacity: 0.85}).addTo(map);
+// جلب اسم المكان بدقة
+async function reverseGeocode(lat, lon) {
+  try {
+    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=18&addressdetails=1`);
+    const data = await res.json();
+    return data.display_name || "غير معروف";
+  } catch (e) {
+    return "غير معروف";
+  }
+}
 
-// smoothing state
-let lastPos = null;
-let filteredPos = null;
-const alpha = 0.35; // درجة تنعيم (0..1) — اجعلها أعلى للتقليل من الاهتزاز
+// تحديث الموقع في الخريطة كل ثانية
+function updatePosition(position) {
+  const { latitude, longitude } = position.coords;
 
-// animation state for smooth movement
-let anim = {start:null, from:null, to:null, duration:1000}; // duration بالمللي ثانية
+  // إنشاء الأيقونة الزرقاء (دبوس)
+  const blueIcon = L.icon({
+    iconUrl: "https://maps.gstatic.com/mapfiles/ms2/micons/blue-dot.png",
+    iconSize: [30, 50],
+    iconAnchor: [15, 50],
+  });
 
-// function to create or move marker with smooth animation
-function animateTo(latlng, accuracy, speedMps){
-  const now = performance.now();
-  if(!marker){
-    // initial marker with small arrow icon
-    const svgIcon = L.divIcon({
-      className: '',
-      html: `
-        <div style="transform:translate(-50%,-50%);">
-          <svg width="42" height="42" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <circle cx="12" cy="12" r="8" fill="#0ea5a0" opacity="0.9"></circle>
-            <circle cx="12" cy="12" r="4" fill="#fff"></circle>
-          </svg>
-        </div>`,
-      iconSize: [42,42],
-      iconAnchor: [21,21]
-    });
-    marker = L.marker(latlng, {icon: svgIcon, interactive:false}).addTo(map);
-    map.setView(latlng, 18);
+  if (!marker) {
+    marker = L.marker([latitude, longitude], { icon: blueIcon }).addTo(map);
+    map.setView([latitude, longitude], 18);
   } else {
-    // set up animation
-    anim.start = now;
-    anim.from = marker.getLatLng();
-    anim.to = latlng;
-    // adaptive duration: if speed high, shorten duration so marker keeps up (but not instant)
-    let dur = 1000;
-    if(speedMps && !isNaN(speedMps)){
-      // convert m/s to influence (fast -> shorter)
-      const sp = Math.min(speedMps, 120); // cap influence
-      dur = Math.max(150, 1200 - sp*8); // heuristic
-    }
-    anim.duration = dur;
+    marker.setLatLng([latitude, longitude]);
+    map.panTo([latitude, longitude], { animate: true, duration: 0.5 });
   }
 
-  // update accuracy circle
-  if(!accuracyCircle){
-    accuracyCircle = L.circle(latlng, {radius: Math.max(accuracy, 1), color:'#0ea5a0', opacity:0.25, fillOpacity:0.08}).addTo(map);
-  } else {
-    accuracyCircle.setLatLng(latlng);
-    accuracyCircle.setRadius(Math.max(accuracy,1));
-  }
-}
-
-// animation loop
-function animLoop(){
-  requestAnimationFrame(animLoop);
-  if(!marker || !anim.start) return;
-  const t = performance.now();
-  const p = Math.min(1, (t - anim.start)/anim.duration);
-  const lat = anim.from.lat + (anim.to.lat - anim.from.lat) * p;
-  const lng = anim.from.lng + (anim.to.lng - anim.from.lng) * p;
-  marker.setLatLng([lat,lng]);
-  // keep accuracy circle synced during animation
-  if(accuracyCircle) accuracyCircle.setLatLng([lat,lng]);
-  // follow marker: keep center on marker but don't change zoom
-  map.panTo([lat,lng], {animate:false});
-  // if animation finished, clear anim.start to avoid reusing
-  if(p >= 1) anim.start = null;
-}
-animLoop();
-
-// smoothing helper (exponential smoothing)
-function smooth(lat,lng){
-  if(!filteredPos){
-    filteredPos = {lat, lng};
-  } else {
-    filteredPos.lat = filteredPos.lat*(1-alpha) + lat*alpha;
-    filteredPos.lng = filteredPos.lng*(1-alpha) + lng*alpha;
-  }
-  return filteredPos;
-}
-
-// main position handler
-function handlePosition(pos){
-  const lat = pos.coords.latitude;
-  const lng = pos.coords.longitude;
-  const accuracy = pos.coords.accuracy || 999;
-  const speed = (pos.coords.speed !== null && !isNaN(pos.coords.speed)) ? pos.coords.speed : 0; // m/s
-  const timestamp = pos.timestamp || Date.now();
-
-  // smoothing
-  const s = smooth(lat,lng);
-
-  // push to path (but avoid duplicates)
-  const last = pathCoords.length ? pathCoords[pathCoords.length-1] : null;
-  if(!last || Math.hypot((s.lat-last.lat)*111000, (s.lng-last.lng)*111000) > 0.5){ // ~0.5m threshold
-    pathCoords.push([s.lat, s.lng]);
-    pathLine.setLatLngs(pathCoords);
-  }
-
-  // animate marker to new location
-  animateTo([s.lat, s.lng], accuracy, speed);
-
-  // update status box
-  statusBox.textContent = `دقة: ${Math.round(accuracy)} م • سرعة تقريبية: ${Math.round(speed)} م/ث • تحديث: ${new Date(timestamp).toLocaleTimeString()}`;
-
-  // (Optional) change appearance if accuracy is very good
-  if(accuracy <= 5){
-    // good
-    statusBox.style.borderLeft = '4px solid #10b981';
-  } else if(accuracy <= 20){
-    statusBox.style.borderLeft = '4px solid #f59e0b';
-  } else {
-    statusBox.style.borderLeft = '4px solid #ef4444';
-  }
-}
-
-// error handler
-function handleError(err){
-  statusBox.textContent = 'خطأ في الحصول على الموقع: ' + (err && err.message ? err.message : err);
-}
-
-// start tracking
-function startTracking(){
-  if(!navigator.geolocation){
-    statusBox.textContent = 'المتصفح لا يدعم تحديد الموقع.';
-    return;
-  }
-
-  // try watchPosition first
-  const options = {
-    enableHighAccuracy: true,
-    maximumAge: 0,
-    timeout: 5000
-  };
-
-  let lastSeen = 0;
-  let watchId = null;
-
-  function gotPosition(p){
-    lastSeen = Date.now();
-    handlePosition(p);
-  }
-
-  function posError(e){
-    handleError(e);
-  }
-
-  try{
-    watchId = navigator.geolocation.watchPosition(gotPosition, posError, options);
-  }catch(e){
-    console.warn('watchPosition failed', e);
-  }
-
-  // fallback: poll every 1s to try to force updates on browsers that throttle watchPosition
-  // note: excessive polling may be blocked or drain battery; this is a best-effort fallback.
-  const pollInterval = 1000;
-  const poller = setInterval(() => {
-    // if we recently got a watchPosition update (<1100ms), skip getCurrentPosition
-    if(Date.now() - lastSeen < 1100) return;
-
-    navigator.geolocation.getCurrentPosition(
-      (p) => {
-        lastSeen = Date.now();
-        handlePosition(p);
-      },
-      (e) => {
-        // ignore timeout errors in polling
-      },
-      {enableHighAccuracy:true, maximumAge:0, timeout:900}
-    );
-  }, pollInterval);
-
-  // Clean-up on page unload
-  window.addEventListener('beforeunload', ()=>{
-    if(watchId !== null) navigator.geolocation.clearWatch(watchId);
-    clearInterval(poller);
+  // تحديث اسم المكان
+  reverseGeocode(latitude, longitude).then(name => {
+    placenameElem.textContent = name;
   });
 }
 
-// start immediately
-startTracking();
+function handleError(error) {
+  placenameElem.textContent = "تعذر تحديد الموقع (" + error.message + ")";
+}
 
+// تشغيل التتبع المستمر بدقة عالية جدًا
+if (navigator.geolocation) {
+  navigator.geolocation.watchPosition(updatePosition, handleError, {
+    enableHighAccuracy: true,
+    maximumAge: 0,
+    timeout: 10000
+  });
+} else {
+  placenameElem.textContent = "المتصفح لا يدعم تحديد الموقع الجغرافي.";
+}
 </script>
+
 </body>
 </html>
