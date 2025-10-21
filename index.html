@@ -106,7 +106,6 @@
     50% { opacity: 0.5; }
   }
 
-  /* زر تتبع الموقع */
   #followBtn {
     position: fixed;
     bottom: 20px;
@@ -133,7 +132,7 @@
 <div id="placenameBox">
   <span class="status-indicator"></span>
   <span class="location-icon">📍</span>
-  الموقع الحالي: <span id="placename">جارٍ تحديد موقعك بدقة...</span>
+  الموقع الحالي حقيقي: <span id="placename">جارٍ تحديد موقعك بدقة...</span>
 </div>
 
 <div id="map"></div>
@@ -149,13 +148,11 @@ let currentPlace = "";
 let lastUpdateTime = 0;
 const UPDATE_INTERVAL = 1000;
 
-// طبقة الخريطة
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   maxZoom: 20,
   attribution: '© OpenStreetMap'
 }).addTo(map);
 
-// أيقونة الموقع
 const bluePinIcon = L.divIcon({
   className: "custom-pin",
   html: `
@@ -169,13 +166,11 @@ const bluePinIcon = L.divIcon({
   iconAnchor: [16, 32],
 });
 
-// تتبع حركة المستخدم على الخريطة
 map.on('movestart', () => {
   isFollowing = false;
   followBtn.innerHTML = "▶️ تتبع موقعي من جديد";
 });
 
-// دالة تحسين الموقع
 let positionHistory = [];
 function refinePosition(position) {
   const { latitude, longitude, accuracy } = position.coords;
@@ -195,7 +190,6 @@ function refinePosition(position) {
   return { lat: lat / totalWeight, lng: lng / totalWeight };
 }
 
-// جلب اسم الموقع بدقة
 async function getAccurateLocationName(lat, lon) {
   try {
     const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=19&addressdetails=1`);
@@ -241,13 +235,11 @@ function handleError(e) {
   console.error("خطأ:", e);
 }
 
-// زر تشغيل التتبع
 followBtn.addEventListener("click", () => {
   isFollowing = true;
   followBtn.innerHTML = "🔄 جاري تتبع موقعك...";
 });
 
-// تشغيل تتبع GPS
 if (navigator.geolocation) {
   navigator.geolocation.watchPosition(updatePosition, handleError, {
     enableHighAccuracy: true,
