@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>تحديد الموقع الجغرافي</title>
+<title>تحديد الموقع الجغرافي السلس</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <style>
 html, body { margin:0; padding:0; height:100%; font-family:sans-serif; }
@@ -47,7 +47,9 @@ html, body { margin:0; padding:0; height:100%; font-family:sans-serif; }
 let map = L.map('mapContainer', { zoomControl:true }).setView([30.0444,31.2357],16);
 let marker = null;
 let userCoords = null;
+let targetCoords = null;
 let userInteracted = false;
+let animationFrameId = null;
 
 // خريطة OpenStreetMap مفصلة
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -59,33 +61,48 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
 map.on('movestart', ()=>{ userInteracted = true; });
 map.on('zoomstart', ()=>{ userInteracted = true; });
 
-// تحديث الموقع باستمرار
+// دالة تحريك العلامة بشكل سلس
+function animateMarker(){
+    if(!marker || !targetCoords) return;
+
+    const current = marker.getLatLng();
+    const latDiff = targetCoords[0] - current.lat;
+    const lngDiff = targetCoords[1] - current.lng;
+    
+    // تحريك تدريجي 20% من المسافة كل إطار
+    const step = 0.2;
+    const newLat = current.lat + latDiff * step;
+    const newLng = current.lng + lngDiff * step;
+
+    marker.setLatLng([newLat, newLng]);
+
+    if(!userInteracted){
+        map.panTo([newLat, newLng], {animate:false});
+    }
+
+    animationFrameId = requestAnimationFrame(animateMarker);
+}
+
+// تحديث الموقع باستخدام GPS
 if(navigator.geolocation){
     navigator.geolocation.watchPosition(async (pos)=>{
-        userCoords = [pos.coords.latitude, pos.coords.longitude];
+        targetCoords = [pos.coords.latitude, pos.coords.longitude];
+        userCoords = [...targetCoords];
 
-        // تحريك العلامة فقط
         if(!marker){
             marker = L.marker(userCoords).addTo(map);
-        } else {
-            marker.setLatLng(userCoords);
+            animateMarker(); // بدء التحريك السلس
         }
 
-        // جلب اسم المكان فقط
+        // تحديث اسم المكان فقط
         try{
-            const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${userCoords[0]}&lon=${userCoords[1]}&zoom=18&accept-language=ar`);
+            const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${targetCoords[0]}&lon=${targetCoords[1]}&zoom=18&accept-language=ar`);
             const data = await res.json();
             document.getElementById('placeName').textContent = data.display_name || 'غير متاح';
         }catch{
             document.getElementById('placeName').textContent = 'غير متاح';
         }
 
-        // تحريك الخريطة لموقعك فقط إذا لم يتفاعل المستخدم
-        if(!userInteracted){
-            map.panTo(userCoords, {animate:true, duration:1});
-        }
-
-        // إظهار زر العودة لموقعك إذا كنت تتصفح
         if(userInteracted){
             document.getElementById('myLocationBtn').style.display = 'block';
         }
