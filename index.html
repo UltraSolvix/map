@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>خريطة الموقع المتقدمة</title>
+<title>خريطة الموقع المتقدمة مع مسار الرحلة</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <style>
 html, body { margin:0; padding:0; height:100%; font-family:sans-serif; background:#f0f0f0; }
@@ -25,62 +25,81 @@ html, body { margin:0; padding:0; height:100%; font-family:sans-serif; backgroun
     backdrop-filter: blur(5px);
     transition: all 0.3s;
 }
+#startTripBtn {
+    position:absolute;
+    bottom:20px;
+    left:50%;
+    transform:translateX(-50%);
+    z-index:1000;
+    padding:10px 20px;
+    font-size:16px;
+    font-weight:bold;
+    color:white;
+    background:#3498db;
+    border:none;
+    border-radius:10px;
+    cursor:pointer;
+    box-shadow:0 4px 8px rgba(0,0,0,0.2);
+}
+#tripModal {
+    display:none;
+    position:absolute;
+    top:50%;
+    left:50%;
+    transform:translate(-50%,-50%);
+    background:white;
+    padding:20px;
+    border-radius:15px;
+    box-shadow:0 6px 12px rgba(0,0,0,0.3);
+    z-index:2000;
+    width:90%;
+    max-width:400px;
+}
+#tripModal input {
+    width:100%;
+    padding:8px;
+    margin:10px 0;
+    border-radius:8px;
+    border:1px solid #ccc;
+}
+#tripModal button {
+    padding:10px 20px;
+    background:#2ecc71;
+    color:white;
+    border:none;
+    border-radius:10px;
+    cursor:pointer;
+    font-weight:bold;
+}
 </style>
 </head>
 <body>
 
 <div id="mapContainer"></div>
 <div class="place-name" id="placeName">جاري تحديد موقعك...</div>
+<button id="startTripBtn">بدء الرحلة</button>
+
+<div id="tripModal">
+    <h3>تحديد الرحلة</h3>
+    <input type="text" id="startInput" placeholder="نقطة البداية">
+    <input type="text" id="endInput" placeholder="نقطة النهاية">
+    <button id="submitTrip">تم</button>
+</div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-let map = L.map('mapContainer', { 
-    zoomControl:true,
-    gestureHandling:true,
-}).setView([30.0444,31.2357],17);
+let map = L.map('mapContainer', { zoomControl:true }).setView([30.0444,31.2357],17);
 
 let marker = null;
 let userCoords = null;
 let targetCoords = null;
+let routeLayer = null;
 
-// إضافة طبقات خريطة OpenStreetMap
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© OpenStreetMap',
-    maxZoom: 22
-}).addTo(map);
+// OpenStreetMap
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap', maxZoom: 22 }).addTo(map);
 
-// طبقة HikeBike للتفاصيل
-L.tileLayer('https://tiles.wmflabs.org/hikebike/{z}/{x}/{y}.png', {
-    maxZoom: 20,
-    opacity:0.4
-}).addTo(map);
-
-// اكتشاف التفاعل للمستخدم
-let userInteracted = false;
-map.on('movestart', ()=>{ userInteracted = true; });
-map.on('zoomstart', ()=>{ userInteracted = true; });
-map.on('touchstart', ()=>{ userInteracted = true; });
-
-// تحريك العلامة بسلاسة
-function animateMarker(){
-    if(!marker || !targetCoords) return;
-
-    const current = marker.getLatLng();
-    const latDiff = targetCoords[0] - current.lat;
-    const lngDiff = targetCoords[1] - current.lng;
-    const step = 0.25; // تحريك أسرع عند السرعات العالية
-
-    const newLat = current.lat + latDiff * step;
-    const newLng = current.lng + lngDiff * step;
-
-    marker.setLatLng([newLat, newLng]);
-
-    if(!userInteracted){
-        map.panTo([newLat, newLng], {animate:false});
-    }
-
-    requestAnimationFrame(animateMarker);
-}
+// HikeBike Layer
+L.tileLayer('https://tiles.wmflabs.org/hikebike/{z}/{x}/{y}.png', { maxZoom: 20, opacity:0.4 }).addTo(map);
 
 // تتبع الموقع
 if(navigator.geolocation){
@@ -90,10 +109,10 @@ if(navigator.geolocation){
 
         if(!marker){
             marker = L.marker(userCoords).addTo(map);
-            animateMarker();
+        } else {
+            marker.setLatLng(userCoords);
         }
 
-        // تحديث اسم المكان فقط
         try{
             const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${targetCoords[0]}&lon=${targetCoords[1]}&zoom=18&accept-language=ar`);
             const data = await res.json();
@@ -101,11 +120,45 @@ if(navigator.geolocation){
         }catch{
             document.getElementById('placeName').textContent = 'غير متاح';
         }
-
-    }, (err)=>{
-        console.error('خطأ في تحديد الموقع:', err);
-    }, { enableHighAccuracy:true, maximumAge:0, timeout:5000 });
+    }, (err)=>{ console.error('خطأ في تحديد الموقع:', err); }, { enableHighAccuracy:true, maximumAge:0, timeout:5000 });
 }
+
+// فتح وإغلاق النموذج
+document.getElementById('startTripBtn').onclick = ()=>{ document.getElementById('tripModal').style.display='block'; };
+document.getElementById('submitTrip').onclick = async ()=>{
+    const start = document.getElementById('startInput').value.trim();
+    const end = document.getElementById('endInput').value.trim();
+    if(!start || !end) return alert('من فضلك املأ كلا الحقلين');
+
+    // تحويل العناوين لإحداثيات
+    const startRes = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(start)}&limit=1`);
+    const endRes = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(end)}&limit=1`);
+    const startData = await startRes.json();
+    const endData = await endRes.json();
+    if(!startData.length || !endData.length) return alert('تعذر العثور على المواقع');
+
+    const startCoords = [parseFloat(startData[0].lat), parseFloat(startData[0].lon)];
+    const endCoords = [parseFloat(endData[0].lat), parseFloat(endData[0].lon)];
+
+    // استخدام OpenRouteService لحساب أفضل مسار للسيارة
+    const ORS_API_KEY = 'eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImFkYThkMjI4NWYyNTQ2ZGQ5NjBhNWM1MTQxYjJkOGU2IiwiaCI6Im11cm11cjY0In0='; // ضع مفتاحك هنا
+    const routeRes = await fetch('https://api.openrouteservice.org/v2/directions/driving-car/geojson', {
+        method:'POST',
+        headers:{ 'Authorization': ORS_API_KEY, 'Content-Type':'application/json' },
+        body: JSON.stringify({ coordinates:[ [startCoords[1], startCoords[0]], [endCoords[1], endCoords[0]] ] })
+    });
+    const routeData = await routeRes.json();
+
+    // إزالة المسار القديم
+    if(routeLayer) map.removeLayer(routeLayer);
+
+    // رسم المسار
+    routeLayer = L.geoJSON(routeData, { style:{ color:'#e74c3c', weight:5 } }).addTo(map);
+    map.fitBounds(routeLayer.getBounds());
+
+    // إغلاق النموذج
+    document.getElementById('tripModal').style.display='none';
+};
 </script>
 
 </body>
