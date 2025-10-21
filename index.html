@@ -3,36 +3,28 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>تحديد الموقع الجغرافي السلس</title>
+<title>خريطة الموقع السلسة والمفصلة</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <style>
-html, body { margin:0; padding:0; height:100%; font-family:sans-serif; }
+html, body { margin:0; padding:0; height:100%; font-family:sans-serif; background:#f0f0f0; }
 #mapContainer { height:100%; width:100%; }
+
 .place-name {
     position:absolute;
     top:10px;
     left:50%;
     transform:translateX(-50%);
-    background:rgba(255,255,255,0.9);
-    padding:12px 20px;
-    border-radius:10px;
-    font-size:18px;
+    background:rgba(255,255,255,0.85);
+    padding:10px 20px;
+    border-radius:15px;
+    font-size:16px;
     font-weight:bold;
+    color:#2c3e50;
     z-index:1000;
     pointer-events:none;
-}
-#myLocationBtn {
-    position:absolute;
-    bottom:15px;
-    right:15px;
-    background:#2ecc71;
-    color:white;
-    border:none;
-    padding:10px 15px;
-    border-radius:10px;
-    font-size:16px;
-    cursor:pointer;
-    z-index:1000;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    backdrop-filter: blur(5px);
+    transition: all 0.3s;
 }
 </style>
 </head>
@@ -40,50 +32,59 @@ html, body { margin:0; padding:0; height:100%; font-family:sans-serif; }
 
 <div id="mapContainer"></div>
 <div class="place-name" id="placeName">جاري تحديد موقعك...</div>
-<button id="myLocationBtn" style="display:none;">العودة لموقعي</button>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-let map = L.map('mapContainer', { zoomControl:true }).setView([30.0444,31.2357],16);
+let map = L.map('mapContainer', { 
+    zoomControl:true, 
+    gestureHandling:true, // يدعم التكبير والتصغير والدوران باللمس
+}).setView([30.0444,31.2357],17);
+
 let marker = null;
 let userCoords = null;
 let targetCoords = null;
-let userInteracted = false;
-let animationFrameId = null;
 
-// خريطة OpenStreetMap مفصلة
+// إضافة طبقات مفصلة للخريطة (OpenStreetMap + HikeBike + Carto)
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '© OpenStreetMap',
     maxZoom: 22
 }).addTo(map);
 
-// اكتشاف تفاعل المستخدم لمنع التمرير التلقائي
-map.on('movestart', ()=>{ userInteracted = true; });
-map.on('zoomstart', ()=>{ userInteracted = true; });
+// طبقة إضافية للمزيد من التفاصيل
+L.tileLayer('https://tiles.wmflabs.org/hikebike/{z}/{x}/{y}.png', {
+    maxZoom: 20,
+    opacity:0.4
+}).addTo(map);
 
-// دالة تحريك العلامة بشكل سلس
+// دالة التحريك السلس للعلامة
 function animateMarker(){
     if(!marker || !targetCoords) return;
 
     const current = marker.getLatLng();
     const latDiff = targetCoords[0] - current.lat;
     const lngDiff = targetCoords[1] - current.lng;
-    
-    // تحريك تدريجي 20% من المسافة كل إطار
     const step = 0.2;
+
     const newLat = current.lat + latDiff * step;
     const newLng = current.lng + lngDiff * step;
 
     marker.setLatLng([newLat, newLng]);
 
+    // الخريطة تتحرك فقط إذا لم يقم المستخدم بتحريكها
     if(!userInteracted){
         map.panTo([newLat, newLng], {animate:false});
     }
 
-    animationFrameId = requestAnimationFrame(animateMarker);
+    requestAnimationFrame(animateMarker);
 }
 
-// تحديث الموقع باستخدام GPS
+// اكتشاف تفاعل المستخدم لمنع إعادة مركز الخريطة
+let userInteracted = false;
+map.on('movestart', ()=>{ userInteracted = true; });
+map.on('zoomstart', ()=>{ userInteracted = true; });
+map.on('rotate', ()=>{ userInteracted = true; });
+
+// تتبع الموقع
 if(navigator.geolocation){
     navigator.geolocation.watchPosition(async (pos)=>{
         targetCoords = [pos.coords.latitude, pos.coords.longitude];
@@ -103,23 +104,10 @@ if(navigator.geolocation){
             document.getElementById('placeName').textContent = 'غير متاح';
         }
 
-        if(userInteracted){
-            document.getElementById('myLocationBtn').style.display = 'block';
-        }
-
     }, (err)=>{
         console.error('خطأ في تحديد الموقع:', err);
     }, { enableHighAccuracy:true, maximumAge:0, timeout:5000 });
 }
-
-// زر العودة لموقع المستخدم
-document.getElementById('myLocationBtn').addEventListener('click', ()=>{
-    if(userCoords){
-        map.panTo(userCoords, {animate:true, duration:1});
-        userInteracted = false;
-        document.getElementById('myLocationBtn').style.display = 'none';
-    }
-});
 </script>
 
 </body>
